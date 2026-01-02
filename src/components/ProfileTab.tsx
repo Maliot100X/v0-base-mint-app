@@ -1,8 +1,31 @@
 "use client"
 import { Button } from "@/components/ui/button"
 import { Zap, ShoppingCart, CreditCard, Rocket, User, ShieldCheck, Wallet } from "lucide-react"
+import { useConnect, useDisconnect, useAccount } from "wagmi"
 
-export function ProfileTab({ userContext, userAddress, balance, onSwitch }: any) {
+export function ProfileTab({ userContext }: any) {
+  const { address: userAddress, isConnected } = useAccount();
+  const { connect, connectors } = useConnect();
+  const { disconnect } = useDisconnect();
+
+  // THIS IS THE FIXED LOGIC
+  const handleSwitch = () => {
+    // 1. Find the Base/Coinbase Wallet first, then fallback to MetaMask/Injected
+    const targetConnector = connectors.find(c => c.id === 'coinbaseWalletSDK') || 
+                            connectors.find(c => c.id === 'injected');
+
+    if (isConnected) {
+      // 2. If already connected, we disconnect first to allow a clean switch
+      disconnect();
+      setTimeout(() => { 
+        if (targetConnector) connect({ connector: targetConnector }); 
+      }, 500);
+    } else {
+      // 3. If not connected, trigger the popup immediately
+      if (targetConnector) connect({ connector: targetConnector });
+    }
+  };
+
   return (
     <div className="p-4 space-y-6 pb-20">
       {/* Profile Header */}
@@ -10,9 +33,11 @@ export function ProfileTab({ userContext, userAddress, balance, onSwitch }: any)
         <div className="w-20 h-20 rounded-full mx-auto mb-3 border-2 border-[#00ff41] bg-[#1a1a1a] flex items-center justify-center overflow-hidden">
           {userContext?.user?.pfpUrl ? <img src={userContext.user.pfpUrl} className="w-full h-full object-cover" /> : <User className="text-gray-600 w-10 h-10" />}
         </div>
-        <h2 className="text-xl font-bold">{userContext?.user?.displayName || "Guest"}</h2>
+        <h2 className="text-xl font-bold uppercase italic tracking-tighter">{userContext?.user?.displayName || "Guest"}</h2>
         <p className="text-[#00ff41] font-mono text-xs">{userAddress ? `${userAddress.slice(0, 12)}...` : "Wallet Not Linked"}</p>
-        <Button onClick={onSwitch} variant="outline" size="sm" className="mt-4 border-[#00ff41]/30 text-[#00ff41] text-[10px] h-7 px-3">
+        
+        {/* THE BUTTON */}
+        <Button onClick={handleSwitch} variant="outline" size="sm" className="mt-4 border-[#00ff41]/30 text-[#00ff41] text-[10px] h-7 px-3">
           <Wallet className="mr-1 w-3 h-3" /> SWITCH WALLET
         </Button>
       </div>
