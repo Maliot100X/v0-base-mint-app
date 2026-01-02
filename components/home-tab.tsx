@@ -7,23 +7,22 @@ import { ExternalLink, Loader2 } from "lucide-react"
 
 export function HomeTab() {
   const officialToken = {
-    name: "BaseMint",
+    name: "BaseMint Platform",
     ticker: "$BMINT",
-    price: "$0.0042",
-    marketCap: "$420K",
-    progress: 85,
+    price: "---",
+    marketCap: "---",
+    progress: 0,
     website: "https://basemint.com",
   }
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
-      {/* Pinned Official Token - $BMINT */}
       <div className="glass rounded-xl p-4 boosted-glow relative">
         <Badge className="absolute top-3 right-3 bg-[#fde047] text-black border-none font-bold text-[10px]">
-          BOOSTED
+          OFFICIAL
         </Badge>
         <div className="flex items-start gap-3">
-          <div className="h-14 w-14 rounded-xl bg-[#00ff41] shadow-[0_0_20px_rgba(0,255,65,0.5)] flex items-center justify-center text-xl font-bold text-black flex-shrink-0">
+          <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-[#00ff41] to-[#00cc33] shadow-[0_0_20px_rgba(0,255,65,0.5)] flex items-center justify-center text-2xl font-bold text-black flex-shrink-0 pixelated border-2 border-[#00ff41]">
             B
           </div>
           <div className="flex-1 min-w-0">
@@ -31,21 +30,21 @@ export function HomeTab() {
               <h3 className="text-lg font-bold truncate">{officialToken.name}</h3>
               <span className="text-sm text-[#00ff41] whitespace-nowrap">{officialToken.ticker}</span>
             </div>
-            <p className="text-xs text-gray-400 mb-3">{"Official BaseMint Platform Token"}</p>
+            <p className="text-xs text-gray-400 mb-3">Official BaseMint Platform Token</p>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <p className="text-[10px] text-gray-500">{"Live Price"}</p>
+                <p className="text-[10px] text-gray-500">Live Price</p>
                 <p className="text-base font-bold text-[#00ff41]">{officialToken.price}</p>
               </div>
               <div>
-                <p className="text-[10px] text-gray-500">{"Market Cap"}</p>
-                <p className="text-base font-bold">{officialToken.marketCap}</p>
+                <p className="text-[10px] text-gray-500">Market Cap</p>
+                <p className="text-base font-bold text-gray-400">{officialToken.marketCap}</p>
               </div>
             </div>
             <div className="space-y-1.5 mb-3">
               <div className="flex justify-between text-[10px]">
-                <span className="text-gray-400">{"Bonding Progress"}</span>
-                <span className="text-[#00ff41]">{officialToken.progress}%</span>
+                <span className="text-gray-400">Bonding Progress</span>
+                <span className="text-gray-500">---</span>
               </div>
               <Progress value={officialToken.progress} className="h-1.5" indicatorClassName="bg-[#fde047]" />
             </div>
@@ -67,8 +66,8 @@ export function HomeTab() {
 
       <div className="glass rounded-lg p-8 text-center">
         <Loader2 className="h-8 w-8 text-[#00ff41] animate-spin mx-auto mb-3" />
-        <p className="text-sm text-gray-400 mb-1">{"Scanning Base for new tokens..."}</p>
-        <p className="text-xs text-gray-600">{"Live feed will appear here"}</p>
+        <p className="text-sm text-gray-400 mb-1 font-semibold">Syncing Base Network...</p>
+        <p className="text-xs text-gray-600">New tokens will appear here</p>
       </div>
     </div>
   )

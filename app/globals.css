@@ -154,10 +154,11 @@
   image-rendering: crisp-edges;
 }
 
+/* Enhanced pixel-font for 8-bit aesthetic with better glow */
 .pixel-font {
   font-family: "Courier New", "Courier", monospace;
   font-weight: 900;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.5), 0 0 10px rgba(0, 255, 65, 0.5), 0 0 20px rgba(0, 255, 65, 0.3);
+  text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8), 0 0 10px rgba(0, 255, 65, 0.6), 0 0 20px rgba(0, 255, 65, 0.4);
 }

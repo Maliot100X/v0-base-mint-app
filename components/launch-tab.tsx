@@ -18,7 +18,7 @@ export function LaunchTab() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("Creating token:", { tokenName, symbol, description })
+    console.log("[v0] Creating token:", { tokenName, symbol, description })
   }
 
   return (
@@ -26,7 +26,7 @@ export function LaunchTab() {
       <div className="mx-auto max-w-2xl">
         <div className="mb-6 text-center">
           <h2 className="mb-2 text-3xl font-bold">Launch Your Token</h2>
-          <p className="text-sm text-gray-400">{"Create the next big thing on Base"}</p>
+          <p className="text-sm text-gray-400">Create the next big thing on Base</p>
         </div>
 
         <Card className="glass border-[#00ff41]/10 p-6">
@@ -77,11 +77,11 @@ export function LaunchTab() {
             {/* Image Upload */}
             <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-300">Token Image</Label>
-              <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-[#00ff41]/20 bg-[#0a0a0a] p-8 transition-colors hover:border-[#00ff41]/50 hover-glow">
+              <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-[#00ff41]/20 bg-[#0a0a0a] p-8 transition-colors hover:border-[#00ff41]/50 hover-glow cursor-pointer">
                 <div className="text-center">
                   <Upload className="mx-auto mb-3 h-10 w-10 text-gray-600" />
-                  <p className="mb-1 text-sm font-medium text-gray-300">{"Click to upload or drag and drop"}</p>
-                  <p className="text-xs text-gray-500">{"PNG, JPG, GIF up to 10MB"}</p>
+                  <p className="mb-1 text-sm font-medium text-gray-300">Click to upload or drag and drop</p>
+                  <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
                 </div>
               </div>
             </div>
@@ -95,11 +95,11 @@ export function LaunchTab() {
               onMouseLeave={() => setIsHovered(false)}
             >
               <Sparkles className="mr-2 h-5 w-5" />
-              Create Token
+              Launch on Base via Clanker
             </Button>
 
             <p className="text-center text-xs text-gray-500">
-              {"Creation fee: 0.0001 ETH • Your token will be tradeable instantly"}
+              Creation fee: 0.0001 ETH • Your token will be tradeable instantly
             </p>
           </form>
         </Card>
