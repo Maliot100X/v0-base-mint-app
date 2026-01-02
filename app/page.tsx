@@ -13,8 +13,7 @@ import { QuestsTab } from "@/components/quests-tab"
 import { ProfileTab } from "@/components/profile-tab"
 
 const publicClient = createPublicClient({
-  chain: base,
-  transport: http(),
+  chain: base, transport: http(),
 })
 
 export default function BaseMintApp() {
@@ -52,6 +51,7 @@ export default function BaseMintApp() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-black">
       <div className="relative flex h-screen w-full max-w-[430px] flex-col bg-[#050505] text-white overflow-hidden border-x border-[#1a1a1a]">
+        {/* HEADER */}
         <header className="flex flex-col border-b border-[#1a1a1a] bg-[#0a0a0a]">
           <div className="flex items-center justify-between px-4 py-4 border-b border-[#1a1a1a]/50">
             <div className="flex items-center gap-3">
@@ -69,6 +69,8 @@ export default function BaseMintApp() {
             </div>
           </div>
         </header>
+
+        {/* TABS AT TOP */}
         <nav className="border-b border-[#1a1a1a] bg-[#0a0a0a] flex">
           {tabs.map((tab) => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`relative flex-1 flex flex-col items-center gap-1 px-2 py-3 transition-all ${activeTab === tab.id ? "text-[#00ff41]" : "text-gray-500"}`}>
@@ -78,6 +80,7 @@ export default function BaseMintApp() {
             </button>
           ))}
         </nav>
+
         <main className="flex-1 overflow-y-auto">
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full">
