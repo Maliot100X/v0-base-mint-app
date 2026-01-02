@@ -28,7 +28,6 @@ export default function BaseMintApp() {
       try {
         const context = await sdk.context;
         setUserContext(context);
-        
         const provider = await sdk.wallet.getEthereumProvider();
         const accounts = await provider.request({ method: "eth_accounts" }) as string[];
         if (accounts[0]) {
@@ -56,6 +55,7 @@ export default function BaseMintApp() {
     <div className="flex min-h-screen items-center justify-center bg-black">
       <div className="relative flex h-screen w-full max-w-[430px] flex-col bg-[#050505] text-white overflow-hidden border-x border-[#1a1a1a]">
         
+        {/* HEADER - RESTORED TO ORIGINAL */}
         <header className="flex flex-col border-b border-[#1a1a1a] bg-[#0a0a0a]">
           <div className="flex items-center justify-between px-4 py-4 border-b border-[#1a1a1a]/50">
             <div className="flex items-center gap-3">
@@ -70,18 +70,19 @@ export default function BaseMintApp() {
             <div className="text-right">
               <div className="text-[#00ff41] font-bold text-sm">{realBalance} ETH</div>
               <div className="text-[9px] text-gray-500 font-mono">
-                {userAddress ? `${userAddress.slice(0, 6)}...` : "Connecting..."}
+                {userAddress ? `${userAddress.slice(0, 6)}...` : "0x..."}
               </div>
             </div>
           </div>
         </header>
 
+        {/* TABS - RESTORED TO TOP */}
         <nav className="border-b border-[#1a1a1a] bg-[#0a0a0a] flex">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`relative flex-1 flex flex-col items-center gap-1 px-2 py-3 transition-all ${activeTab === tab.id ? "text-[#00ff41]" : "text-gray-600"}`}
+              className={`relative flex-1 flex flex-col items-center gap-1 px-2 py-3 transition-all ${activeTab === tab.id ? "text-[#00ff41]" : "text-gray-500"}`}
             >
               <tab.icon className="h-4 w-4" />
               <span className="text-[10px] font-medium uppercase">{tab.label}</span>
@@ -90,6 +91,7 @@ export default function BaseMintApp() {
           ))}
         </nav>
 
+        {/* MAIN CONTENT */}
         <main className="flex-1 overflow-y-auto">
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full">
@@ -98,11 +100,7 @@ export default function BaseMintApp() {
               {activeTab === "airdrop" && <AirdropTab />}
               {activeTab === "quests" && <QuestsTab />}
               {activeTab === "profile" && (
-                <ProfileTab 
-                  userContext={userContext} 
-                  userAddress={userAddress}
-                  balance={realBalance}
-                />
+                <ProfileTab userContext={userContext} userAddress={userAddress} balance={realBalance} />
               )}
             </motion.div>
           </AnimatePresence>
