@@ -1,1 +1,0 @@
-{"cleanUrls":true,"trailingSlash":false,"rewrites":[{"source":"/.well-known/farcaster.json","destination":"/.well-known/farcaster.json"},{"source":"/(.*)","destination":"/"}]}
