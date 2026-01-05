@@ -23,7 +23,8 @@ export default function LaunchTab() {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Load drafts for connected wallet
   useEffect(() => {
@@ -31,23 +32,45 @@ export default function LaunchTab() {
     setDrafts(getDraftsByCreator(address));
   }, [address]);
 
-  // Create Draft (CONTENT ENTRY)
-  function handleCreateDraft() {
-    if (!address || !title || !imageUrl) return;
+  // Create Draft (FILE → IPFS → Draft)
+  async function handleCreateDraft() {
+    if (!address || !title || !imageFile) return;
 
-    createDraftContent({
-      creatorWallet: address,
-      title,
-      description,
-      prompt: title,
-      imageUrl,
-    });
+    setIsUploading(true);
 
-    setTitle("");
-    setDescription("");
-    setImageUrl("");
+    try {
+      const formData = new FormData();
+      formData.append("file", imageFile);
 
-    setDrafts(getDraftsByCreator(address));
+      const res = await fetch("/api/upload-ipfs", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!data.ipfsUrl) {
+        throw new Error("IPFS upload failed");
+      }
+
+      createDraftContent({
+        creatorWallet: address,
+        title,
+        description,
+        prompt: title,
+        imageUrl: data.ipfsUrl, // ipfs://CID
+      });
+
+      setTitle("");
+      setDescription("");
+      setImageFile(null);
+
+      setDrafts(getDraftsByCreator(address));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsUploading(false);
+    }
   }
 
   // Coin It (PREVIEW ONLY)
@@ -63,7 +86,7 @@ export default function LaunchTab() {
     const intent = createCoinIntent({
       contentId: draft.id,
       creatorAddress: address,
-      creatorName: address.slice(0, 6),
+      creatorName: "BaseMint Creator",
       contentText: draft.description || draft.title,
     });
 
@@ -93,18 +116,19 @@ export default function LaunchTab() {
         />
 
         <input
-          placeholder="Image URL"
-          className="w-full bg-[#0a0a0a] border border-[#222] p-2 text-xs rounded"
-          value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
+          type="file"
+          accept="image/*"
+          className="w-full text-xs"
+          onChange={(e) => setImageFile(e.target.files?.[0] || null)}
         />
 
         <button
           onClick={handleCreateDraft}
-          className="w-full bg-[#00ff41] text-black font-black text-xs py-2 rounded"
+          disabled={isUploading}
+          className="w-full bg-[#00ff41] text-black font-black text-xs py-2 rounded disabled:opacity-50"
         >
           <Upload size={14} className="inline mr-1" />
-          Create Draft
+          {isUploading ? "Uploading…" : "Create Draft"}
         </button>
       </div>
 
