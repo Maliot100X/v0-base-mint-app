@@ -1,192 +1,138 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAccount, useSendTransaction } from "wagmi";
-import { Loader2, Rocket, AlertCircle } from "lucide-react";
+import { useAccount } from "wagmi";
+import { Rocket } from "lucide-react";
 
 import {
-  createDraftContent,
   getDraftsByCreator,
-  markDraftAsCoined,
+  DraftContent,
 } from "@/lib/contentStore";
 
-const PLATFORM_REFERRER = "0x1909b332397144aeb4867B7274a05Dbb25bD1Fec";
+import {
+  createCoinIntent,
+  getCoinIntentByContent,
+} from "@/lib/coinIntentStore";
 
 export default function LaunchTab() {
-  const { address, isConnected } = useAccount();
-  const { sendTransactionAsync } = useSendTransaction();
+  const { address } = useAccount();
 
-  const [draftId, setDraftId] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [ticker, setTicker] = useState("");
-  const [status, setStatus] = useState("");
-  const [isMinting, setIsMinting] = useState(false);
+  const [drafts, setDrafts] = useState<DraftContent[]>([]);
+  const [previewIntent, setPreviewIntent] = useState<any | null>(null);
 
   /**
-   * STEP 3: Load existing draft (REAL data)
+   * Load drafts for connected wallet
    */
   useEffect(() => {
     if (!address) return;
-
-    const drafts = getDraftsByCreator(address);
-    const activeDraft = drafts.find((d) => d.status === "draft");
-
-    if (activeDraft) {
-      setDraftId(activeDraft.id);
-      setName(activeDraft.title);
-      setTicker(activeDraft.prompt || "");
-      setStatus("Draft loaded. Ready to launch.");
-    }
+    setDrafts(getDraftsByCreator(address));
   }, [address]);
 
   /**
-   * Launch / Coin it (REAL mint)
+   * COIN IT (PREVIEW ONLY)
    */
-  const handleLaunch = async () => {
-    if (!isConnected || !address) {
-      setStatus("Please connect wallet first");
+  function handleCoinIt(draft: DraftContent) {
+    if (!address) return;
+
+    // If intent already exists, reuse it
+    const existing = getCoinIntentByContent(draft.id);
+    if (existing) {
+      setPreviewIntent(existing);
       return;
     }
 
-    if (!name || !ticker) {
-      setStatus("Please enter Name and Ticker");
-      return;
-    }
+    const intent = createCoinIntent({
+      contentId: draft.id,
+      creatorAddress: address,
+      creatorName: draft.creatorFid
+        ? `Farcaster #${draft.creatorFid}`
+        : address.slice(0, 6),
+      contentText: draft.description || draft.title,
+    });
 
-    setIsMinting(true);
-
-    try {
-      let currentDraftId = draftId;
-
-      // Create draft if none exists yet
-      if (!currentDraftId) {
-        const draft = createDraftContent({
-          creatorWallet: address,
-          title: name,
-          description: "",
-          prompt: ticker,
-          imageUrl: "",
-          status: "draft",
-          createdAt: Date.now(),
-        });
-
-        currentDraftId = draft.id;
-        setDraftId(draft.id);
-      }
-
-      setStatus("Preparing coin deployment...");
-
-      const response = await fetch("/api/create-zora-coin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          creator: address,
-          name,
-          symbol: ticker,
-          platformReferrer: PLATFORM_REFERRER,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!data.success || !data.transaction) {
-        throw new Error(data.error || "Failed to prepare transaction");
-      }
-
-      setStatus("Please sign the transaction...");
-
-      const hash = await sendTransactionAsync({
-        to: data.transaction.to,
-        data: data.transaction.data,
-        value: BigInt(data.transaction.value || "0"),
-      });
-
-      setStatus("Coin deploying on Base...");
-
-      // Mark draft as COINED (REAL state change)
-      if (currentDraftId) {
-        markDraftAsCoined(currentDraftId);
-      }
-
-      setTimeout(() => {
-        setStatus("Coin launched successfully!");
-
-        if (data.coinAddress) {
-          window.open(
-            "https://basescan.org/token/" + data.coinAddress,
-            "_blank"
-          );
-        }
-      }, 3000);
-    } catch (err: any) {
-      console.error(err);
-      setStatus(err.message || "Transaction failed");
-    } finally {
-      setIsMinting(false);
-    }
-  };
+    setPreviewIntent(intent);
+  }
 
   return (
     <div className="h-full w-full bg-[#050505] p-4 text-white overflow-y-auto pb-20">
       <div className="mb-6 text-center">
         <h2 className="text-2xl font-black uppercase text-[#00ff41] tracking-tighter">
-          Launch Token
+          Launch
         </h2>
         <p className="text-xs text-gray-500 font-mono">
-          Content → Coin → Indexed
+          Content → Coin Preview
         </p>
       </div>
 
+      {/* Drafts */}
       <div className="space-y-4 max-w-sm mx-auto">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-[10px] font-mono uppercase text-gray-500 mb-1">
-              Coin Name
-            </label>
-            <input
-              type="text"
-              className="w-full bg-[#0a0a0a] border border-[#333] rounded p-3 text-sm"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-mono uppercase text-gray-500 mb-1">
-              Ticker
-            </label>
-            <input
-              type="text"
-              className="w-full bg-[#0a0a0a] border border-[#333] rounded p-3 text-sm uppercase"
-              value={ticker}
-              onChange={(e) => setTicker(e.target.value.toUpperCase())}
-            />
-          </div>
-        </div>
-
-        <button
-          onClick={handleLaunch}
-          disabled={isMinting}
-          className="w-full bg-gradient-to-r from-[#0052FF] to-[#00ff41] py-4 rounded font-black uppercase flex justify-center items-center gap-2 disabled:opacity-50"
-        >
-          {isMinting ? (
-            <>
-              <Loader2 className="animate-spin" /> Processing…
-            </>
-          ) : (
-            <>
-              <Rocket size={18} /> COIN IT
-            </>
-          )}
-        </button>
-
-        {status && (
-          <div className="mt-4 p-3 bg-[#111] border border-[#333] rounded flex gap-2">
-            <AlertCircle className="w-4 h-4 text-[#00ff41]" />
-            <span className="text-xs font-mono">{status}</span>
-          </div>
+        {drafts.length === 0 && (
+          <p className="text-xs text-gray-500 text-center">
+            No drafts yet
+          </p>
         )}
+
+        {drafts.map((draft) => (
+          <div
+            key={draft.id}
+            className="bg-[#0a0a0a] border border-[#222] rounded-lg p-3"
+          >
+            <div className="flex items-center gap-3">
+              {draft.imageUrl && (
+                <img
+                  src={draft.imageUrl}
+                  className="w-14 h-14 object-cover rounded"
+                />
+              )}
+
+              <div className="flex-1">
+                <p className="text-sm font-bold">{draft.title}</p>
+                <p className="text-[10px] text-gray-500">
+                  Creator: {draft.creatorWallet.slice(0, 10)}…
+                </p>
+              </div>
+
+              <button
+                onClick={() => handleCoinIt(draft)}
+                className="px-3 py-1 text-xs font-black bg-[#00ff41] text-black rounded"
+              >
+                Coin It
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
+
+      {/* Preview */}
+      {previewIntent && (
+        <div className="mt-6 max-w-sm mx-auto border border-[#00ff41]/40 rounded-xl p-4 bg-[#050505]">
+          <h4 className="text-sm font-black uppercase text-[#00ff41] mb-2">
+            Coin Preview
+          </h4>
+
+          <div className="space-y-2 text-xs font-mono">
+            <p>
+              <span className="text-gray-400">Token:</span>{" "}
+              {previewIntent.tokenName}
+            </p>
+            <p>
+              <span className="text-gray-400">Ticker:</span>{" "}
+              ${previewIntent.ticker}
+            </p>
+            <p className="text-gray-400">Description:</p>
+            <p className="text-gray-300">
+              {previewIntent.description}
+            </p>
+            <p className="text-yellow-500">
+              Status: PREPARED
+            </p>
+          </div>
+
+          <p className="mt-3 text-[10px] text-gray-500">
+            Minting happens in the next step.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
