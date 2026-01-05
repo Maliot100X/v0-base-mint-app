@@ -1,53 +1,83 @@
 import { NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+
+function json(status: number, body: any) {
+  return NextResponse.json(body, { status });
+}
+
 export async function POST(req: Request) {
   try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File;
+    const PINATA_JWT = process.env.PINATA_JWT;
 
-    if (!file) {
-      return NextResponse.json({ success: false, error: "No file provided" });
-    }
-
-    // Convert file to buffer
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    // Upload to Pinata
-    const pinataFormData = new FormData();
-    const blob = new Blob([buffer], { type: file.type });
-    pinataFormData.append("file", blob, file.name);
-
-    const response = await fetch(
-      "https://api.pinata.cloud/pinning/pinFileToIPFS",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.PINATA_JWT}`,
-        },
-        body: pinataFormData,
-      }
-    );
-
-    const data = await response.json();
-
-    if (!data.IpfsHash) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "Upload failed" 
+    if (!PINATA_JWT) {
+      return json(400, {
+        ok: false,
+        error: "Missing env PINATA_JWT. Add it in Vercel Environment Variables.",
       });
     }
 
-    return NextResponse.json({
-      success: true,
-      ipfsUrl: `ipfs://${data.IpfsHash}`,
+    const formData = await req.formData();
+    const file = formData.get("file");
+
+    if (!file || !(file instanceof File)) {
+      return json(400, { ok: false, error: "No file uploaded (field name: file)" });
+    }
+
+    const pinataForm = new FormData();
+    pinataForm.append("file", file, file.name);
+
+    // Optional: metadata
+    pinataForm.append(
+      "pinataMetadata",
+      JSON.stringify({
+        name: file.name,
+        keyvalues: {
+          app: "BaseMint",
+        },
+      })
+    );
+
+    const r = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${PINATA_JWT}`,
+      },
+      body: pinataForm,
     });
 
-  } catch (error: any) {
-    console.error("IPFS Upload error:", error);
-    return NextResponse.json({ 
-      success: false, 
-      error: error.message 
-    }, { status: 500 });
+    const text = await r.text();
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // keep raw text
+    }
+
+    if (!r.ok) {
+      return json(r.status, {
+        ok: false,
+        error: "Pinata upload failed",
+        status: r.status,
+        details: parsed ?? text,
+      });
+    }
+
+    const cid = parsed?.IpfsHash;
+    if (!cid) {
+      return json(500, { ok: false, error: "Pinata response missing IpfsHash", details: parsed });
+    }
+
+    return json(200, {
+      ok: true,
+      cid,
+      ipfsUrl: `ipfs://${cid}`,
+      gatewayUrl: `https://ipfs.io/ipfs/${cid}`,
+    });
+  } catch (e: any) {
+    return json(500, {
+      ok: false,
+      error: e?.message || "upload-ipfs failed",
+    });
   }
 }
