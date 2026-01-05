@@ -13,13 +13,14 @@ import {
 import {
   createCoinIntent,
   getCoinIntentByContent,
+  CoinIntent,
 } from "@/lib/coinIntentStore";
 
+/** Always render IPFS safely in browser */
 function ipfsToHttp(url: string) {
   if (!url) return "";
   if (url.startsWith("ipfs://")) {
-    const cid = url.replace("ipfs://", "");
-    return `https://ipfs.io/ipfs/${cid}`;
+    return `https://ipfs.io/ipfs/${url.replace("ipfs://", "")}`;
   }
   return url;
 }
@@ -28,30 +29,31 @@ export default function LaunchTab() {
   const { address } = useAccount();
 
   const [drafts, setDrafts] = useState<DraftContent[]>([]);
-  const [previewIntent, setPreviewIntent] = useState<any | null>(null);
+  const [previewIntent, setPreviewIntent] = useState<CoinIntent | null>(null);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Emerge-style pairing input (prefilled, editable)
+  /** Emerge-style creator coin pairing (prefilled, editable) */
   const [creatorCoinAddress, setCreatorCoinAddress] = useState(
     "0xe648dc77cff081b000b7c07e9b594a69b2242094"
   );
 
-  // Load drafts
+  /** Load drafts */
   useEffect(() => {
     if (!address) return;
     setDrafts(getDraftsByCreator(address));
   }, [address]);
 
+  /** Local preview before IPFS upload */
   const localPreviewUrl = useMemo(() => {
     if (!imageFile) return "";
     return URL.createObjectURL(imageFile);
   }, [imageFile]);
 
-  // Create Draft: file -> /api/upload-ipfs -> ipfs://... stored
+  /** Create Draft: file → IPFS → DraftContent */
   async function handleCreateDraft() {
     if (!address || !title || !imageFile) return;
 
@@ -66,10 +68,7 @@ export default function LaunchTab() {
       });
 
       const data = await res.json();
-
-      if (!data.ipfsUrl) {
-        throw new Error("IPFS upload failed");
-      }
+      if (!data.ipfsUrl) throw new Error("IPFS upload failed");
 
       createDraftContent({
         creatorWallet: address,
@@ -84,14 +83,14 @@ export default function LaunchTab() {
       setImageFile(null);
 
       setDrafts(getDraftsByCreator(address));
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      console.error(err);
     } finally {
       setIsUploading(false);
     }
   }
 
-  // Coin It preview (includes pairing address + shows image)
+  /** Coin It → PREVIEW ONLY (Emerge-style) */
   function handleCoinIt(draft: DraftContent) {
     if (!address) return;
 
@@ -101,13 +100,12 @@ export default function LaunchTab() {
       return;
     }
 
-    const creatorName = "BaseMint"; // until we wire Farcaster display/base name properly
-
     const intent = createCoinIntent({
       contentId: draft.id,
       creatorAddress: address,
-      creatorName,
+      creatorName: "BaseMint", // Farcaster/Base name wired later
       contentText: draft.description || draft.title,
+      imageUrl: draft.imageUrl,
       creatorCoinAddress,
     });
 
@@ -136,7 +134,6 @@ export default function LaunchTab() {
           onChange={(e) => setDescription(e.target.value)}
         />
 
-        {/* file picker */}
         <input
           type="file"
           accept="image/*"
@@ -144,7 +141,6 @@ export default function LaunchTab() {
           onChange={(e) => setImageFile(e.target.files?.[0] || null)}
         />
 
-        {/* local preview before upload */}
         {localPreviewUrl && (
           <img
             src={localPreviewUrl}
@@ -164,10 +160,6 @@ export default function LaunchTab() {
 
       {/* DRAFT LIST */}
       <div className="max-w-sm mx-auto space-y-3">
-        {drafts.length === 0 && (
-          <p className="text-xs text-gray-500 text-center">No drafts yet</p>
-        )}
-
         {drafts.map((draft) => (
           <div
             key={draft.id}
@@ -195,7 +187,7 @@ export default function LaunchTab() {
         ))}
       </div>
 
-      {/* COIN PREVIEW (Emerge-style pairing) */}
+      {/* COIN PREVIEW */}
       {previewIntent && (
         <div className="max-w-sm mx-auto mt-6 border border-[#00ff41]/40 rounded p-4 bg-[#0a0a0a]">
           <h4 className="text-xs font-black text-[#00ff41] mb-2">
@@ -206,6 +198,11 @@ export default function LaunchTab() {
             className="w-full bg-[#050505] border border-[#222] p-2 text-xs rounded mb-3 font-mono"
             value={creatorCoinAddress}
             onChange={(e) => setCreatorCoinAddress(e.target.value)}
+          />
+
+          <img
+            src={ipfsToHttp(previewIntent.imageUrl || "")}
+            className="w-full rounded border border-[#222] mb-3"
           />
 
           <div className="space-y-2 text-xs">
@@ -226,7 +223,9 @@ export default function LaunchTab() {
 
             <div>
               <div className="text-gray-400 text-[10px] uppercase">You Receive</div>
-              <div className="font-bold">Token • 1B {previewIntent.ticker}</div>
+              <div className="font-bold">
+                Token • 1B {previewIntent.ticker}
+              </div>
             </div>
           </div>
 

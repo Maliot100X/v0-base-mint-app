@@ -7,31 +7,24 @@ export interface CoinIntent {
   contentId: string;
   creatorAddress: string;
   creatorName: string;
-  creatorCoinAddress?: string; // Emerge-style pairing
+  creatorCoinAddress?: string;
   tokenName: string;
   ticker: string;
   description: string;
-  supply: string; // "1000000000" (1B)
+  imageUrl?: string;
+  supply: string; // 1B
   status: CoinIntentStatus;
   createdAt: number;
 }
 
 const coinIntents: CoinIntent[] = [];
 
-/**
- * Emerge-aligned meta:
- * - creatorName should be the creator identity (Farcaster display / base name / fallback addr)
- * - token name: "<creatorName>'s Creator Token"
- * - ticker: derived from creatorName, but never "BASE" default; fallback "BMINT"
- */
-function generateTokenMeta(params: { creatorName: string; contentText: string }) {
-  const creatorName = (params.creatorName || "").trim() || "BaseMint";
+function generateTokenMeta(params: { creatorName: string }) {
+  const creatorName = params.creatorName || "BaseMint";
   const cleaned = creatorName.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
 
-  // derive ticker but keep it sane
-  let ticker = cleaned.slice(0, 5) || "BMINT";
-  if (ticker === "BASE") ticker = "BMINT";
-  if (ticker.length < 3) ticker = "BMINT";
+  let ticker = cleaned.slice(0, 5);
+  if (!ticker || ticker === "BASE" || ticker.length < 3) ticker = "BMINT";
 
   const tokenName = `${creatorName}'s Creator Token`;
 
@@ -47,12 +40,10 @@ export function createCoinIntent(params: {
   creatorAddress: string;
   creatorName: string;
   contentText: string;
+  imageUrl?: string;
   creatorCoinAddress?: string;
 }) {
-  const meta = generateTokenMeta({
-    creatorName: params.creatorName,
-    contentText: params.contentText,
-  });
+  const meta = generateTokenMeta({ creatorName: params.creatorName });
 
   const intent: CoinIntent = {
     id: uuidv4(),
@@ -63,7 +54,8 @@ export function createCoinIntent(params: {
     tokenName: meta.tokenName,
     ticker: meta.ticker,
     description: meta.description,
-    supply: "1000000000", // 1B
+    imageUrl: params.imageUrl,
+    supply: "1000000000",
     status: "prepared",
     createdAt: Date.now(),
   };
