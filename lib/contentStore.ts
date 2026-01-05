@@ -1,5 +1,7 @@
 // lib/contentStore.ts
-// Phase 1: Internal content layer (NO Zora / NO onchain calls)
+// Phase 1–3: Internal content layer (NO Zora / NO onchain calls)
+
+import { createCoinIntent } from "./coinIntentStore";
 
 export type DraftContentStatus = "draft" | "coined";
 
@@ -22,8 +24,6 @@ function nowMs() {
 }
 
 function genId() {
-  // deterministic enough for in-memory store; no external deps
-  // Example: dc_1700000000000_ab12cd34
   const rand = Math.random().toString(16).slice(2, 10);
   return `dc_${nowMs()}_${rand}`;
 }
@@ -34,7 +34,7 @@ function normWallet(addr: string) {
 
 /**
  * Create a new DraftContent record (status="draft").
- * NOTE: In Phase 1 this is in-memory only (no persistence).
+ * ALSO prepares a CoinIntent (Phase 3).
  */
 export function createDraftContent(input: {
   creatorWallet: string;
@@ -63,6 +63,25 @@ export function createDraftContent(input: {
 
   // newest-first
   _drafts = [draft, ..._drafts];
+
+  /**
+   * 🔗 PHASE 3 BRIDGE:
+   * Automatically prepare a CoinIntent for this content.
+   * NO UI. NO mint. NO blockchain.
+   */
+  try {
+    createCoinIntent({
+      contentId: draft.id,
+      creatorAddress: creatorWallet,
+      creatorName:
+        draft.title ||
+        (draft.creatorFid ? `Farcaster #${draft.creatorFid}` : "BaseMint Creator"),
+      contentText: `${draft.title}\n${draft.description}`,
+    });
+  } catch (err) {
+    console.error("CoinIntent creation failed (non-fatal):", err);
+  }
+
   return draft;
 }
 
@@ -83,8 +102,8 @@ export function getDraftsByCreator(creatorWallet: string): DraftContent[] {
 }
 
 /**
- * Mark a record as "coined" (Phase 2+ will call this after Zora coin creation).
- * Returns the updated record, or null if not found.
+ * Mark a record as "coined".
+ * Phase 4 will call this after onchain mint succeeds.
  */
 export function markDraftAsCoined(id: string): DraftContent | null {
   const targetId = (id || "").trim();
@@ -105,8 +124,7 @@ export function markDraftAsCoined(id: string): DraftContent | null {
 }
 
 /**
- * Internal helper for debugging/tests if needed.
- * Not used by UI. Safe to remove later.
+ * Debug helper (safe to remove later).
  */
 export function __dangerousResetContentStore() {
   _drafts = [];
