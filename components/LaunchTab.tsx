@@ -1,21 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAccount, useSendTransaction } from "wagmi";
 import { Loader2, Rocket, AlertCircle } from "lucide-react";
-import { createDraftContent } from "@/lib/contentStore"; // ✅ ADDED
+
+import {
+  createDraftContent,
+  getDraftsByCreator,
+  markDraftAsCoined,
+} from "@/lib/contentStore";
 
 const PLATFORM_REFERRER = "0x1909b332397144aeb4867B7274a05Dbb25bD1Fec";
 
 export default function LaunchTab() {
+  const { address, isConnected } = useAccount();
+  const { sendTransactionAsync } = useSendTransaction();
+
+  const [draftId, setDraftId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [ticker, setTicker] = useState("");
   const [status, setStatus] = useState("");
   const [isMinting, setIsMinting] = useState(false);
 
-  const { address, isConnected } = useAccount();
-  const { sendTransactionAsync } = useSendTransaction();
+  /**
+   * STEP 3: Load existing draft (REAL data)
+   */
+  useEffect(() => {
+    if (!address) return;
 
+    const drafts = getDraftsByCreator(address);
+    const activeDraft = drafts.find((d) => d.status === "draft");
+
+    if (activeDraft) {
+      setDraftId(activeDraft.id);
+      setName(activeDraft.title);
+      setTicker(activeDraft.prompt || "");
+      setStatus("Draft loaded. Ready to launch.");
+    }
+  }, [address]);
+
+  /**
+   * Launch / Coin it (REAL mint)
+   */
   const handleLaunch = async () => {
     if (!isConnected || !address) {
       setStatus("Please connect wallet first");
@@ -27,18 +53,27 @@ export default function LaunchTab() {
       return;
     }
 
-    // ✅ PHASE 1 – STEP 2: SAVE DRAFT (SAFE, NO UI EFFECT)
-    createDraftContent({
-      creatorWallet: address,
-      title: name,
-      symbol: ticker,
-      status: "draft",
-      createdAt: Date.now(),
-    });
-
     setIsMinting(true);
 
     try {
+      let currentDraftId = draftId;
+
+      // Create draft if none exists yet
+      if (!currentDraftId) {
+        const draft = createDraftContent({
+          creatorWallet: address,
+          title: name,
+          description: "",
+          prompt: ticker,
+          imageUrl: "",
+          status: "draft",
+          createdAt: Date.now(),
+        });
+
+        currentDraftId = draft.id;
+        setDraftId(draft.id);
+      }
+
       setStatus("Preparing coin deployment...");
 
       const response = await fetch("/api/create-zora-coin", {
@@ -68,8 +103,14 @@ export default function LaunchTab() {
 
       setStatus("Coin deploying on Base...");
 
+      // Mark draft as COINED (REAL state change)
+      if (currentDraftId) {
+        markDraftAsCoined(currentDraftId);
+      }
+
       setTimeout(() => {
-        setStatus("Coin Launched Successfully!");
+        setStatus("Coin launched successfully!");
+
         if (data.coinAddress) {
           window.open(
             "https://basescan.org/token/" + data.coinAddress,
@@ -77,7 +118,6 @@ export default function LaunchTab() {
           );
         }
       }, 3000);
-
     } catch (err: any) {
       console.error(err);
       setStatus(err.message || "Transaction failed");
@@ -93,7 +133,7 @@ export default function LaunchTab() {
           Launch Token
         </h2>
         <p className="text-xs text-gray-500 font-mono">
-          Deploy instantly on Base via Zora
+          Content → Coin → Indexed
         </p>
       </div>
 
@@ -105,8 +145,7 @@ export default function LaunchTab() {
             </label>
             <input
               type="text"
-              placeholder="Base Cat"
-              className="w-full bg-[#0a0a0a] border border-[#333] rounded p-3 text-sm text-white focus:border-[#00ff41] outline-none"
+              className="w-full bg-[#0a0a0a] border border-[#333] rounded p-3 text-sm"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -118,44 +157,33 @@ export default function LaunchTab() {
             </label>
             <input
               type="text"
-              placeholder="BCAT"
-              className="w-full bg-[#0a0a0a] border border-[#333] rounded p-3 text-sm text-white focus:border-[#00ff41] outline-none uppercase"
+              className="w-full bg-[#0a0a0a] border border-[#333] rounded p-3 text-sm uppercase"
               value={ticker}
               onChange={(e) => setTicker(e.target.value.toUpperCase())}
             />
           </div>
         </div>
 
-        <div className="pt-4">
-          <button
-            onClick={handleLaunch}
-            disabled={isMinting || !address}
-            className="w-full bg-gradient-to-r from-[#0052FF] to-[#00ff41] hover:opacity-90 text-white font-black uppercase tracking-wider py-4 rounded flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {isMinting ? (
-              <>
-                <Loader2 className="animate-spin" /> Processing...
-              </>
-            ) : (
-              <>
-                <Rocket size={18} /> LAUNCH COIN NOW
-              </>
-            )}
-          </button>
-
-          <div className="text-center mt-3 space-y-1">
-            <p className="text-yellow-500 text-[10px] font-mono">
-              Fee: ~$0.50 Gas Only
-            </p>
-          </div>
-        </div>
+        <button
+          onClick={handleLaunch}
+          disabled={isMinting}
+          className="w-full bg-gradient-to-r from-[#0052FF] to-[#00ff41] py-4 rounded font-black uppercase flex justify-center items-center gap-2 disabled:opacity-50"
+        >
+          {isMinting ? (
+            <>
+              <Loader2 className="animate-spin" /> Processing…
+            </>
+          ) : (
+            <>
+              <Rocket size={18} /> COIN IT
+            </>
+          )}
+        </button>
 
         {status && (
-          <div className="mt-4 p-3 bg-[#111] border border-[#333] rounded flex items-center gap-2">
+          <div className="mt-4 p-3 bg-[#111] border border-[#333] rounded flex gap-2">
             <AlertCircle className="w-4 h-4 text-[#00ff41]" />
-            <span className="text-xs text-gray-300 font-mono break-all">
-              {status}
-            </span>
+            <span className="text-xs font-mono">{status}</span>
           </div>
         )}
       </div>
