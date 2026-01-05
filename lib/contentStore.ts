@@ -1,7 +1,5 @@
 // lib/contentStore.ts
-// Phase 1–3: Internal content layer (NO Zora / NO onchain calls)
-
-import { createCoinIntent } from "./coinIntentStore";
+// Internal content layer (drafts). Now persisted to localStorage (client only).
 
 export type DraftContentStatus = "draft" | "coined";
 
@@ -12,12 +10,39 @@ export type DraftContent = {
   title: string;
   description: string;
   prompt: string;
-  imageUrl: string;
+  imageUrl: string; // usually ipfs://...
   status: DraftContentStatus;
   createdAt: number; // unix ms
 };
 
+const STORAGE_KEY = "basemint_drafts_v1";
+
 let _drafts: DraftContent[] = [];
+
+function isBrowser() {
+  return typeof window !== "undefined";
+}
+
+function loadFromStorage() {
+  if (!isBrowser()) return;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) _drafts = parsed as DraftContent[];
+  } catch {
+    // ignore
+  }
+}
+
+function saveToStorage() {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(_drafts));
+  } catch {
+    // ignore
+  }
+}
 
 function nowMs() {
   return Date.now();
@@ -32,9 +57,13 @@ function normWallet(addr: string) {
   return (addr || "").trim().toLowerCase();
 }
 
+function ensureLoaded() {
+  // lazy-load once per session
+  if (_drafts.length === 0) loadFromStorage();
+}
+
 /**
  * Create a new DraftContent record (status="draft").
- * ALSO prepares a CoinIntent (Phase 3).
  */
 export function createDraftContent(input: {
   creatorWallet: string;
@@ -44,6 +73,8 @@ export function createDraftContent(input: {
   prompt: string;
   imageUrl: string;
 }): DraftContent {
+  ensureLoaded();
+
   const creatorWallet = normWallet(input.creatorWallet);
   if (!creatorWallet) {
     throw new Error("createDraftContent: creatorWallet is required");
@@ -61,34 +92,16 @@ export function createDraftContent(input: {
     createdAt: nowMs(),
   };
 
-  // newest-first
   _drafts = [draft, ..._drafts];
-
-  /**
-   * 🔗 PHASE 3 BRIDGE:
-   * Automatically prepare a CoinIntent for this content.
-   * NO UI. NO mint. NO blockchain.
-   */
-  try {
-    createCoinIntent({
-      contentId: draft.id,
-      creatorAddress: creatorWallet,
-      creatorName:
-        draft.title ||
-        (draft.creatorFid ? `Farcaster #${draft.creatorFid}` : "BaseMint Creator"),
-      contentText: `${draft.title}\n${draft.description}`,
-    });
-  } catch (err) {
-    console.error("CoinIntent creation failed (non-fatal):", err);
-  }
-
+  saveToStorage();
   return draft;
 }
 
 /**
- * Return all content records (draft + coined), newest-first.
+ * Return all records, newest-first.
  */
 export function getAllDraftContent(): DraftContent[] {
+  ensureLoaded();
   return [..._drafts];
 }
 
@@ -96,6 +109,7 @@ export function getAllDraftContent(): DraftContent[] {
  * Return records for a specific creator wallet, newest-first.
  */
 export function getDraftsByCreator(creatorWallet: string): DraftContent[] {
+  ensureLoaded();
   const w = normWallet(creatorWallet);
   if (!w) return [];
   return _drafts.filter((d) => d.creatorWallet === w);
@@ -103,9 +117,9 @@ export function getDraftsByCreator(creatorWallet: string): DraftContent[] {
 
 /**
  * Mark a record as "coined".
- * Phase 4 will call this after onchain mint succeeds.
  */
 export function markDraftAsCoined(id: string): DraftContent | null {
+  ensureLoaded();
   const targetId = (id || "").trim();
   if (!targetId) return null;
 
@@ -120,12 +134,12 @@ export function markDraftAsCoined(id: string): DraftContent | null {
   const next = [..._drafts];
   next[idx] = updated;
   _drafts = next;
+
+  saveToStorage();
   return updated;
 }
 
-/**
- * Debug helper (safe to remove later).
- */
 export function __dangerousResetContentStore() {
   _drafts = [];
+  saveToStorage();
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import { Upload } from "lucide-react";
 
@@ -15,6 +15,15 @@ import {
   getCoinIntentByContent,
 } from "@/lib/coinIntentStore";
 
+function ipfsToHttp(url: string) {
+  if (!url) return "";
+  if (url.startsWith("ipfs://")) {
+    const cid = url.replace("ipfs://", "");
+    return `https://ipfs.io/ipfs/${cid}`;
+  }
+  return url;
+}
+
 export default function LaunchTab() {
   const { address } = useAccount();
 
@@ -26,18 +35,27 @@ export default function LaunchTab() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Load drafts for connected wallet
+  // Emerge-style pairing input (prefilled, editable)
+  const [creatorCoinAddress, setCreatorCoinAddress] = useState(
+    "0xe648dc77cff081b000b7c07e9b594a69b2242094"
+  );
+
+  // Load drafts
   useEffect(() => {
     if (!address) return;
     setDrafts(getDraftsByCreator(address));
   }, [address]);
 
-  // Create Draft (FILE → IPFS → Draft)
+  const localPreviewUrl = useMemo(() => {
+    if (!imageFile) return "";
+    return URL.createObjectURL(imageFile);
+  }, [imageFile]);
+
+  // Create Draft: file -> /api/upload-ipfs -> ipfs://... stored
   async function handleCreateDraft() {
     if (!address || !title || !imageFile) return;
 
     setIsUploading(true);
-
     try {
       const formData = new FormData();
       formData.append("file", imageFile);
@@ -66,14 +84,14 @@ export default function LaunchTab() {
       setImageFile(null);
 
       setDrafts(getDraftsByCreator(address));
-    } catch (err) {
-      console.error(err);
+    } catch (e) {
+      console.error(e);
     } finally {
       setIsUploading(false);
     }
   }
 
-  // Coin It (PREVIEW ONLY)
+  // Coin It preview (includes pairing address + shows image)
   function handleCoinIt(draft: DraftContent) {
     if (!address) return;
 
@@ -83,11 +101,14 @@ export default function LaunchTab() {
       return;
     }
 
+    const creatorName = "BaseMint"; // until we wire Farcaster display/base name properly
+
     const intent = createCoinIntent({
       contentId: draft.id,
       creatorAddress: address,
-      creatorName: "BaseMint Creator",
+      creatorName,
       contentText: draft.description || draft.title,
+      creatorCoinAddress,
     });
 
     setPreviewIntent(intent);
@@ -115,12 +136,21 @@ export default function LaunchTab() {
           onChange={(e) => setDescription(e.target.value)}
         />
 
+        {/* file picker */}
         <input
           type="file"
           accept="image/*"
           className="w-full text-xs"
           onChange={(e) => setImageFile(e.target.files?.[0] || null)}
         />
+
+        {/* local preview before upload */}
+        {localPreviewUrl && (
+          <img
+            src={localPreviewUrl}
+            className="w-full rounded border border-[#222] object-cover"
+          />
+        )}
 
         <button
           onClick={handleCreateDraft}
@@ -135,9 +165,7 @@ export default function LaunchTab() {
       {/* DRAFT LIST */}
       <div className="max-w-sm mx-auto space-y-3">
         {drafts.length === 0 && (
-          <p className="text-xs text-gray-500 text-center">
-            No drafts yet
-          </p>
+          <p className="text-xs text-gray-500 text-center">No drafts yet</p>
         )}
 
         {drafts.map((draft) => (
@@ -147,7 +175,7 @@ export default function LaunchTab() {
           >
             <div className="flex gap-3">
               <img
-                src={draft.imageUrl}
+                src={ipfsToHttp(draft.imageUrl)}
                 className="w-14 h-14 rounded object-cover"
               />
               <div className="flex-1">
@@ -167,16 +195,43 @@ export default function LaunchTab() {
         ))}
       </div>
 
-      {/* COIN PREVIEW */}
+      {/* COIN PREVIEW (Emerge-style pairing) */}
       {previewIntent && (
-        <div className="max-w-sm mx-auto mt-6 border border-[#00ff41]/40 rounded p-4">
+        <div className="max-w-sm mx-auto mt-6 border border-[#00ff41]/40 rounded p-4 bg-[#0a0a0a]">
           <h4 className="text-xs font-black text-[#00ff41] mb-2">
-            Coin Preview
+            Search Creator Coin
           </h4>
-          <p className="text-xs">Name: {previewIntent.tokenName}</p>
-          <p className="text-xs">Ticker: ${previewIntent.ticker}</p>
-          <p className="text-[10px] text-gray-400 mt-1">
-            {previewIntent.description}
+
+          <input
+            className="w-full bg-[#050505] border border-[#222] p-2 text-xs rounded mb-3 font-mono"
+            value={creatorCoinAddress}
+            onChange={(e) => setCreatorCoinAddress(e.target.value)}
+          />
+
+          <div className="space-y-2 text-xs">
+            <div>
+              <div className="text-gray-400 text-[10px] uppercase">Token Name</div>
+              <div className="font-bold">{previewIntent.tokenName}</div>
+            </div>
+
+            <div>
+              <div className="text-gray-400 text-[10px] uppercase">Ticker</div>
+              <div className="font-bold">${previewIntent.ticker}</div>
+            </div>
+
+            <div>
+              <div className="text-gray-400 text-[10px] uppercase">Description</div>
+              <div className="text-gray-200">{previewIntent.description}</div>
+            </div>
+
+            <div>
+              <div className="text-gray-400 text-[10px] uppercase">You Receive</div>
+              <div className="font-bold">Token • 1B {previewIntent.ticker}</div>
+            </div>
+          </div>
+
+          <p className="mt-3 text-[10px] text-gray-500">
+            Minting is next (Phase 4). This step is preview only.
           </p>
         </div>
       )}
