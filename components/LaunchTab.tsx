@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
-import { Rocket } from "lucide-react";
+import { Upload } from "lucide-react";
 
 import {
+  createDraftContent,
   getDraftsByCreator,
   DraftContent,
 } from "@/lib/contentStore";
@@ -20,21 +21,39 @@ export default function LaunchTab() {
   const [drafts, setDrafts] = useState<DraftContent[]>([]);
   const [previewIntent, setPreviewIntent] = useState<any | null>(null);
 
-  /**
-   * Load drafts for connected wallet
-   */
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+
+  // Load drafts for connected wallet
   useEffect(() => {
     if (!address) return;
     setDrafts(getDraftsByCreator(address));
   }, [address]);
 
-  /**
-   * COIN IT (PREVIEW ONLY)
-   */
+  // Create Draft (CONTENT ENTRY)
+  function handleCreateDraft() {
+    if (!address || !title || !imageUrl) return;
+
+    createDraftContent({
+      creatorWallet: address,
+      title,
+      description,
+      prompt: title,
+      imageUrl,
+    });
+
+    setTitle("");
+    setDescription("");
+    setImageUrl("");
+
+    setDrafts(getDraftsByCreator(address));
+  }
+
+  // Coin It (PREVIEW ONLY)
   function handleCoinIt(draft: DraftContent) {
     if (!address) return;
 
-    // If intent already exists, reuse it
     const existing = getCoinIntentByContent(draft.id);
     if (existing) {
       setPreviewIntent(existing);
@@ -44,9 +63,7 @@ export default function LaunchTab() {
     const intent = createCoinIntent({
       contentId: draft.id,
       creatorAddress: address,
-      creatorName: draft.creatorFid
-        ? `Farcaster #${draft.creatorFid}`
-        : address.slice(0, 6),
+      creatorName: address.slice(0, 6),
       contentText: draft.description || draft.title,
     });
 
@@ -55,17 +72,44 @@ export default function LaunchTab() {
 
   return (
     <div className="h-full w-full bg-[#050505] p-4 text-white overflow-y-auto pb-20">
-      <div className="mb-6 text-center">
-        <h2 className="text-2xl font-black uppercase text-[#00ff41] tracking-tighter">
-          Launch
-        </h2>
-        <p className="text-xs text-gray-500 font-mono">
-          Content → Coin Preview
-        </p>
+      <h2 className="text-2xl font-black uppercase text-[#00ff41] text-center mb-4">
+        Create Content
+      </h2>
+
+      {/* CONTENT INPUT */}
+      <div className="max-w-sm mx-auto space-y-3 mb-6">
+        <input
+          placeholder="Title"
+          className="w-full bg-[#0a0a0a] border border-[#222] p-2 text-sm rounded"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+
+        <textarea
+          placeholder="Description"
+          className="w-full bg-[#0a0a0a] border border-[#222] p-2 text-xs rounded"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+
+        <input
+          placeholder="Image URL"
+          className="w-full bg-[#0a0a0a] border border-[#222] p-2 text-xs rounded"
+          value={imageUrl}
+          onChange={(e) => setImageUrl(e.target.value)}
+        />
+
+        <button
+          onClick={handleCreateDraft}
+          className="w-full bg-[#00ff41] text-black font-black text-xs py-2 rounded"
+        >
+          <Upload size={14} className="inline mr-1" />
+          Create Draft
+        </button>
       </div>
 
-      {/* Drafts */}
-      <div className="space-y-4 max-w-sm mx-auto">
+      {/* DRAFT LIST */}
+      <div className="max-w-sm mx-auto space-y-3">
         {drafts.length === 0 && (
           <p className="text-xs text-gray-500 text-center">
             No drafts yet
@@ -75,26 +119,22 @@ export default function LaunchTab() {
         {drafts.map((draft) => (
           <div
             key={draft.id}
-            className="bg-[#0a0a0a] border border-[#222] rounded-lg p-3"
+            className="border border-[#222] rounded p-3 bg-[#0a0a0a]"
           >
-            <div className="flex items-center gap-3">
-              {draft.imageUrl && (
-                <img
-                  src={draft.imageUrl}
-                  className="w-14 h-14 object-cover rounded"
-                />
-              )}
-
+            <div className="flex gap-3">
+              <img
+                src={draft.imageUrl}
+                className="w-14 h-14 rounded object-cover"
+              />
               <div className="flex-1">
                 <p className="text-sm font-bold">{draft.title}</p>
-                <p className="text-[10px] text-gray-500">
-                  Creator: {draft.creatorWallet.slice(0, 10)}…
+                <p className="text-[10px] text-gray-500 truncate">
+                  {draft.description}
                 </p>
               </div>
-
               <button
                 onClick={() => handleCoinIt(draft)}
-                className="px-3 py-1 text-xs font-black bg-[#00ff41] text-black rounded"
+                className="text-xs bg-[#00ff41] text-black px-2 rounded font-black"
               >
                 Coin It
               </button>
@@ -103,33 +143,16 @@ export default function LaunchTab() {
         ))}
       </div>
 
-      {/* Preview */}
+      {/* COIN PREVIEW */}
       {previewIntent && (
-        <div className="mt-6 max-w-sm mx-auto border border-[#00ff41]/40 rounded-xl p-4 bg-[#050505]">
-          <h4 className="text-sm font-black uppercase text-[#00ff41] mb-2">
+        <div className="max-w-sm mx-auto mt-6 border border-[#00ff41]/40 rounded p-4">
+          <h4 className="text-xs font-black text-[#00ff41] mb-2">
             Coin Preview
           </h4>
-
-          <div className="space-y-2 text-xs font-mono">
-            <p>
-              <span className="text-gray-400">Token:</span>{" "}
-              {previewIntent.tokenName}
-            </p>
-            <p>
-              <span className="text-gray-400">Ticker:</span>{" "}
-              ${previewIntent.ticker}
-            </p>
-            <p className="text-gray-400">Description:</p>
-            <p className="text-gray-300">
-              {previewIntent.description}
-            </p>
-            <p className="text-yellow-500">
-              Status: PREPARED
-            </p>
-          </div>
-
-          <p className="mt-3 text-[10px] text-gray-500">
-            Minting happens in the next step.
+          <p className="text-xs">Name: {previewIntent.tokenName}</p>
+          <p className="text-xs">Ticker: ${previewIntent.ticker}</p>
+          <p className="text-[10px] text-gray-400 mt-1">
+            {previewIntent.description}
           </p>
         </div>
       )}
