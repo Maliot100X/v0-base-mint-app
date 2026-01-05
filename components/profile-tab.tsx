@@ -141,4 +141,17 @@ export function ProfileTab({ userContext, userAddress, balance, onSwitch }: any)
           </span>
         </p>
 
-        <ul className="text-[10px] space-y-2 text-gray-300 uppercase font-black t
+        <ul className="text-[10px] space-y-2 text-gray-300 uppercase font-black tracking-tight">
+          <li>• Double Quest Points (2x rewards)</li>
+          <li>• 1 Free Weekly Boost (30 min)</li>
+          <li>• Priority Support</li>
+          <li>• Exclusive Badge</li>
+        </ul>
+
+        <Button className="w-full mt-4 bg-[#00ff41] text-black font-black uppercase text-xs h-12 shadow-[0_0_20px_rgba(0,255,65,0.4)]">
+          Subscribe Now
+        </Button>
+      </div>
+    </div>
+  )
+}
