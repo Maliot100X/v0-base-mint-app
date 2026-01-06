@@ -2,55 +2,73 @@ import { NextResponse } from "next/server";
 import { createCoinCall, CreateConstants } from "@zoralabs/coins-sdk";
 import { Address } from "viem";
 
+export const runtime = "nodejs";
+
 export async function POST(req: Request) {
   try {
-    const { creator, name, symbol, platformReferrer } = await req.json();
+    const {
+      creator,
+      name,
+      symbol,
+      image,              // ipfs://CID from your draft
+      platformReferrer,   // optional
+    } = await req.json();
 
-    if (!creator || !name || !symbol) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "Missing required fields" 
-      });
+    if (!creator || !name || !symbol || !image) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Missing required fields (creator, name, symbol, image)",
+        },
+        { status: 400 }
+      );
     }
 
-    console.log("Creating Zora coin:", { creator, name, symbol });
+    console.log("Creating Zora coin", {
+      creator,
+      name,
+      symbol,
+      image,
+    });
 
-    // Use a valid IPFS metadata URI that already exists
+    // 🔒 Zora Coins SDK — prepares a USER-SIGNED transaction
     const result = await createCoinCall({
       creator: creator as Address,
       name,
       symbol,
       metadata: {
-        type: "RAW_URI" as const,
-        uri: "ipfs://bafkreifch6stfh3fn3nqv5tpxnknjpo7zulqav55f2b5pryadx6hldldwe",
+        type: "RAW_URI",
+        uri: image, // ✅ USE YOUR DRAFT IPFS IMAGE
       },
       currency: CreateConstants.ContentCoinCurrencies.ZORA,
-      chainId: 8453,
+      chainId: 8453, // Base mainnet
       startingMarketCap: CreateConstants.StartingMarketCaps.LOW,
-      platformReferrer: platformReferrer as Address,
+      platformReferrer: platformReferrer as Address | undefined,
     });
 
     if (!result.calls || result.calls.length === 0) {
-      throw new Error("No transaction data from Zora SDK");
+      throw new Error("No transaction calls returned from Zora SDK");
     }
 
-    const transaction = result.calls[0];
+    const tx = result.calls[0];
 
     return NextResponse.json({
       success: true,
       transaction: {
-        to: transaction.to,
-        data: transaction.data,
-        value: transaction.value.toString(),
+        to: tx.to,
+        data: tx.data,
+        value: tx.value?.toString() ?? "0",
       },
-      coinAddress: result.predictedCoinAddress,
+      predictedCoinAddress: result.predictedCoinAddress,
     });
-
-  } catch (error: any) {
-    console.error("Zora coin error:", error);
-    return NextResponse.json({ 
-      success: false, 
-      error: error.message 
-    }, { status: 500 });
+  } catch (err: any) {
+    console.error("Zora coin creation failed:", err);
+    return NextResponse.json(
+      {
+        success: false,
+        error: err?.message ?? "Zora coin creation failed",
+      },
+      { status: 500 }
+    );
   }
 }
