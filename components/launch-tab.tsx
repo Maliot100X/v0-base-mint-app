@@ -24,7 +24,6 @@ export function LaunchTab() {
   const { address } = useAccount();
 
   const [drafts, setDrafts] = useState<DraftContent[]>([]);
-  const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [previewIntent, setPreviewIntent] = useState<CoinIntent | null>(null);
 
   const [title, setTitle] = useState("");
@@ -97,12 +96,10 @@ export function LaunchTab() {
   }
 
   // =========================
-  // COIN IT
+  // COIN IT (PREVIEW ONLY)
   // =========================
   function handleCoinIt(draft: DraftContent) {
     if (!address) return;
-
-    setSelectedDraftId(draft.id);
 
     const intent = getOrCreateCoinIntent({
       contentId: draft.id,
@@ -187,7 +184,7 @@ export function LaunchTab() {
         ))}
       </div>
 
-      {/* CREATOR COIN SECTION */}
+      {/* CREATOR COIN + PREVIEW */}
       <div className="max-w-sm mx-auto mt-6 space-y-3">
         <div className="border rounded p-4 bg-[#0a0a0a]">
           <p className="text-xs font-black text-[#00ff41] mb-2">
@@ -238,6 +235,39 @@ export function LaunchTab() {
                   {formatSupply1B(previewIntent.ticker)}
                 </p>
               </div>
+
+              {/* ✅ CREATE REAL COIN — ONLY ADDITION */}
+              <button
+                className="mt-4 w-full bg-[#00ff41] text-black font-black text-xs py-2 rounded"
+                onClick={async () => {
+                  if (!address || !previewIntent) return;
+
+                  const res = await fetch("/api/create-zora-coin", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      creator: address,
+                      name: previewIntent.tokenName,
+                      symbol: previewIntent.ticker,
+                      image: previewIntent.imageUrl,
+                      description: previewIntent.description,
+                      platformReferrer: address,
+                    }),
+                  });
+
+                  const data = await res.json();
+
+                  if (!res.ok) {
+                    alert(data?.error || "Zora coin creation failed");
+                    return;
+                  }
+
+                  console.log("Zora transaction prepared:", data);
+                  alert("Transaction prepared. Wallet wiring is next.");
+                }}
+              >
+                Create Real Coin
+              </button>
             </div>
           )}
         </div>
