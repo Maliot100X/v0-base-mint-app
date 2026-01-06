@@ -13,7 +13,6 @@ import {
 
 import {
   getOrCreateCoinIntent,
-  getCoinIntentByContent,
   CoinIntent,
 } from "@/lib/coinIntentStore";
 
@@ -25,6 +24,7 @@ export function LaunchTab() {
   const { address } = useAccount();
 
   const [drafts, setDrafts] = useState<DraftContent[]>([]);
+  const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [previewIntent, setPreviewIntent] = useState<CoinIntent | null>(null);
 
   const [title, setTitle] = useState("");
@@ -32,6 +32,7 @@ export function LaunchTab() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  const [searchCreatorCoin, setSearchCreatorCoin] = useState("");
   const [creatorCoinAddress, setCreatorCoinAddress] = useState(
     "0x0000000000000000000000000000000000000000"
   );
@@ -45,6 +46,9 @@ export function LaunchTab() {
     return imageFile ? URL.createObjectURL(imageFile) : "";
   }, [imageFile]);
 
+  // =========================
+  // CREATE DRAFT
+  // =========================
   async function handleCreateDraft() {
     if (!address || !title || !imageFile) return;
 
@@ -92,8 +96,13 @@ export function LaunchTab() {
     }
   }
 
+  // =========================
+  // COIN IT
+  // =========================
   function handleCoinIt(draft: DraftContent) {
     if (!address) return;
+
+    setSelectedDraftId(draft.id);
 
     const intent = getOrCreateCoinIntent({
       contentId: draft.id,
@@ -113,6 +122,7 @@ export function LaunchTab() {
         Create Content
       </h2>
 
+      {/* CREATE CONTENT */}
       <div className="max-w-sm mx-auto space-y-3 mb-6">
         <input
           placeholder="Title"
@@ -135,7 +145,10 @@ export function LaunchTab() {
         />
 
         {localPreviewUrl && (
-          <img src={localPreviewUrl} className="w-full rounded border" />
+          <img
+            src={localPreviewUrl}
+            className="w-full rounded border object-cover"
+          />
         )}
 
         <button
@@ -148,6 +161,7 @@ export function LaunchTab() {
         </button>
       </div>
 
+      {/* DRAFT LIST */}
       <div className="max-w-sm mx-auto space-y-3">
         {drafts.map((draft) => (
           <div key={draft.id} className="border rounded p-3 bg-[#0a0a0a]">
@@ -173,24 +187,61 @@ export function LaunchTab() {
         ))}
       </div>
 
-      {previewIntent && (
-        <div className="max-w-sm mx-auto mt-6 border rounded p-4 bg-black/30">
-          <p className="text-sm font-bold">{previewIntent.tokenName}</p>
-          <p className="text-sm">${previewIntent.ticker}</p>
-          <p className="text-xs text-gray-300">
-            {previewIntent.description}
+      {/* CREATOR COIN SECTION */}
+      <div className="max-w-sm mx-auto mt-6 space-y-3">
+        <div className="border rounded p-4 bg-[#0a0a0a]">
+          <p className="text-xs font-black text-[#00ff41] mb-2">
+            Search Creator Coin
           </p>
 
-          <img
-            src={resolveIpfs(previewIntent.imageUrl)}
-            className="w-full rounded border mt-2"
+          <input
+            className="w-full bg-[#0a0a0a] border p-2 text-xs rounded font-mono"
+            placeholder="Search by creator / address / handle"
+            value={searchCreatorCoin}
+            onChange={(e) => setSearchCreatorCoin(e.target.value)}
           />
 
-          <p className="mt-3 text-[#00ff41] font-black">
-            {formatSupply1B(previewIntent.ticker)}
+          <p className="text-xs font-black text-[#00ff41] mt-4 mb-2">
+            Pair content to a creator coin
           </p>
+
+          <input
+            className="w-full bg-[#0a0a0a] border p-2 text-xs rounded font-mono"
+            value={creatorCoinAddress}
+            onChange={(e) => setCreatorCoinAddress(e.target.value)}
+          />
+
+          {!previewIntent ? (
+            <p className="text-[11px] text-gray-500 mt-3">
+              Select a draft and click <b>Coin It</b>.
+            </p>
+          ) : (
+            <div className="mt-4 border rounded p-4 bg-black/30">
+              <p className="text-sm font-bold">
+                {previewIntent.tokenName}
+              </p>
+              <p className="text-sm font-bold">
+                ${previewIntent.ticker}
+              </p>
+              <p className="text-[11px] text-gray-300">
+                {previewIntent.description}
+              </p>
+
+              <img
+                src={resolveIpfs(previewIntent.imageUrl)}
+                className="w-full rounded border mt-2"
+              />
+
+              <div className="mt-3 border-t pt-3">
+                <p className="text-[10px] text-gray-500">YOU RECEIVE</p>
+                <p className="text-base font-black text-[#00ff41]">
+                  {formatSupply1B(previewIntent.ticker)}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
