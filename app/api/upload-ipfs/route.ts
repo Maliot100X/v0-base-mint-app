@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 
-export const runtime = "edge";
+/**
+ * IMPORTANT:
+ * This MUST be Node.js.
+ * Edge runtime WILL cause random 403 / 500 / Pinata failures.
+ */
+export const runtime = "nodejs";
 
 function json(status: number, body: any) {
-  return new NextResponse(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
+  return NextResponse.json(body, { status });
 }
 
 export async function POST(req: Request) {
@@ -37,23 +39,23 @@ export async function POST(req: Request) {
       "pinataMetadata",
       JSON.stringify({
         name: file.name,
-        keyvalues: { app: "BaseMint" },
+        keyvalues: {
+          app: "BaseMint",
+        },
       })
     );
 
-    const r = await fetch(
-      "https://api.pinata.cloud/pinning/pinFileToIPFS",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${PINATA_JWT}`,
-        },
-        body: pinataForm,
-      }
-    );
+    const r = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${PINATA_JWT}`,
+      },
+      body: pinataForm,
+    });
 
     const text = await r.text();
-    let parsed: any;
+    let parsed: any = null;
+
     try {
       parsed = JSON.parse(text);
     } catch {
