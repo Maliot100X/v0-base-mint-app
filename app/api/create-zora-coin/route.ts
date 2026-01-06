@@ -19,7 +19,7 @@ export async function POST(req: Request) {
       creator,
       name,
       symbol,
-      image,            // ipfs://CID (IMAGE)
+      image,            // ipfs://IMAGE_CID
       description,
       platformReferrer,
     } = await req.json();
@@ -34,23 +34,23 @@ export async function POST(req: Request) {
       );
     }
 
-    // ----------------------------------------------------
-    // 1️⃣ BUILD ZORA-COMPATIBLE METADATA JSON
-    // ----------------------------------------------------
+    /* --------------------------------------------------
+       1) BUILD ERC-721 / ZORA METADATA
+    -------------------------------------------------- */
     const metadata = {
       name,
       description: description || `${name} content coin`,
-      image, // ipfs://IMAGE_CID
+      image, // ipfs://...
       external_url: "https://v0-base-mint-app.vercel.app",
       attributes: [
         { trait_type: "Platform", value: "BaseMint" },
-        { trait_type: "Type", value: "Creator Coin" },
+        { trait_type: "Network", value: "Base" },
       ],
     };
 
-    // ----------------------------------------------------
-    // 2️⃣ UPLOAD METADATA JSON TO PINATA
-    // ----------------------------------------------------
+    /* --------------------------------------------------
+       2) UPLOAD METADATA JSON TO PINATA
+    -------------------------------------------------- */
     const pinRes = await fetch(
       "https://api.pinata.cloud/pinning/pinJSONToIPFS",
       {
@@ -83,18 +83,18 @@ export async function POST(req: Request) {
 
     const metadataUri = `ipfs://${pinData.IpfsHash}`;
 
-    // ----------------------------------------------------
-    // 3️⃣ CALL ZORA COINS SDK (THIS NOW WORKS)
-    // ----------------------------------------------------
+    /* --------------------------------------------------
+       3) CREATE ZORA COIN (BASE = ETH ONLY)
+    -------------------------------------------------- */
     const result = await createCoinCall({
       creator: creator as Address,
       name,
       symbol,
       metadata: {
         type: "RAW_URI",
-        uri: metadataUri, // ✅ VALID ZORA METADATA
+        uri: metadataUri,
       },
-      currency: CreateConstants.ContentCoinCurrencies.ZORA,
+      currency: CreateConstants.ContentCoinCurrencies.ETH, // ✅ FIX
       chainId: 8453, // Base mainnet
       startingMarketCap: CreateConstants.StartingMarketCaps.LOW,
       platformReferrer: platformReferrer as Address | undefined,
