@@ -10,6 +10,9 @@ export async function POST(req: Request) {
   try {
     const PINATA_JWT = process.env.PINATA_JWT;
 
+    // 🔎 DEBUG — TEMPORARY
+    console.log("PINATA_JWT exists:", !!PINATA_JWT);
+
     if (!PINATA_JWT) {
       return json(400, {
         ok: false,
@@ -21,13 +24,16 @@ export async function POST(req: Request) {
     const file = formData.get("file");
 
     if (!file || !(file instanceof File)) {
-      return json(400, { ok: false, error: "No file uploaded (field name: file)" });
+      return json(400, {
+        ok: false,
+        error: "No file uploaded (field name: file)",
+      });
     }
 
     const pinataForm = new FormData();
     pinataForm.append("file", file, file.name);
 
-    // Optional: metadata
+    // Optional metadata
     pinataForm.append(
       "pinataMetadata",
       JSON.stringify({
@@ -65,14 +71,17 @@ export async function POST(req: Request) {
 
     const cid = parsed?.IpfsHash;
     if (!cid) {
-      return json(500, { ok: false, error: "Pinata response missing IpfsHash", details: parsed });
+      return json(500, {
+        ok: false,
+        error: "Pinata response missing IpfsHash",
+        details: parsed,
+      });
     }
 
     return json(200, {
       ok: true,
       cid,
       ipfsUrl: `ipfs://${cid}`,
-      gatewayUrl: `https://ipfs.io/ipfs/${cid}`,
     });
   } catch (e: any) {
     return json(500, {
