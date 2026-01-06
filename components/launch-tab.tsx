@@ -6,17 +6,16 @@ import { Upload } from "lucide-react";
 import { resolveIpfs } from "@/lib/ipfs";
 
 import {
+  createDraftContent,
+  getDraftsByCreator,
+  DraftContent,
+} from "@/lib/contentStore";
+
+import {
   getOrCreateCoinIntent,
   getCoinIntentByContent,
   CoinIntent,
 } from "@/lib/coinIntentStore";
-
-type Draft = {
-  id: string;
-  title: string;
-  description?: string;
-  imageUrl: string;
-};
 
 function formatSupply1B(ticker: string) {
   return `1B ${(ticker || "TOKEN").toUpperCase()}`;
@@ -25,7 +24,7 @@ function formatSupply1B(ticker: string) {
 export function LaunchTab() {
   const { address } = useAccount();
 
-  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [drafts, setDrafts] = useState<DraftContent[]>([]);
   const [previewIntent, setPreviewIntent] = useState<CoinIntent | null>(null);
 
   const [title, setTitle] = useState("");
@@ -33,84 +32,67 @@ export function LaunchTab() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const [searchCreatorCoin, setSearchCreatorCoin] = useState("");
   const [creatorCoinAddress, setCreatorCoinAddress] = useState(
     "0x0000000000000000000000000000000000000000"
   );
 
-  /* --------------------------------
-     LOAD DRAFTS (PERSISTED)
-  -------------------------------- */
   useEffect(() => {
     if (!address) return;
-
-    fetch(`/api/content?creator=${address}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data?.creations)) {
-          setDrafts(data.creations);
-        }
-      })
-      .catch(console.error);
+    setDrafts(getDraftsByCreator(address));
   }, [address]);
 
   const localPreviewUrl = useMemo(() => {
-    if (!imageFile) return "";
-    return URL.createObjectURL(imageFile);
+    return imageFile ? URL.createObjectURL(imageFile) : "";
   }, [imageFile]);
 
-  /* --------------------------------
-     CREATE DRAFT (REAL BACKEND)
-  -------------------------------- */
   async function handleCreateDraft() {
     if (!address || !title || !imageFile) return;
 
     setIsUploading(true);
     try {
-      const fd = new FormData();
-      fd.append("file", imageFile);
+      const formData = new FormData();
+      formData.append("file", imageFile);
 
-      const upload = await fetch("/api/upload-ipfs", {
+      const res = await fetch("/api/upload-ipfs", {
         method: "POST",
-        body: fd,
+        body: formData,
       });
 
-      if (!upload.ok) throw new Error("IPFS upload failed");
+      if (!res.ok) throw new Error("IPFS upload failed");
 
-      const up = await upload.json();
-      const ipfsUrl = up?.ipfsUrl || `ipfs://${up.cid}`;
-      if (!ipfsUrl) throw new Error("No IPFS URL");
+      const data = await res.json();
+      const ipfsUrl = data.ipfsUrl;
+      if (!ipfsUrl) throw new Error("Missing IPFS URL");
 
-      const res = await fetch("/api/content", {
+      createDraftContent({
+        creatorWallet: address,
+        title,
+        description,
+        prompt: title,
+        imageUrl: ipfsUrl,
+      });
+
+      await fetch("/api/content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           creatorAddress: address,
+          imageUrl: ipfsUrl,
           title,
           description,
-          imageUrl: ipfsUrl,
         }),
       });
 
-      if (!res.ok) throw new Error("Save failed");
-
-      const { creation } = await res.json();
-
-      setDrafts((d) => [creation, ...d]);
       setTitle("");
       setDescription("");
       setImageFile(null);
-    } catch (e) {
-      console.error(e);
+      setDrafts(getDraftsByCreator(address));
     } finally {
       setIsUploading(false);
     }
   }
 
-  /* --------------------------------
-     COIN IT (INTENT ONLY)
-  -------------------------------- */
-  function handleCoinIt(draft: Draft) {
+  function handleCoinIt(draft: DraftContent) {
     if (!address) return;
 
     const intent = getOrCreateCoinIntent({
@@ -131,7 +113,6 @@ export function LaunchTab() {
         Create Content
       </h2>
 
-      {/* CREATE */}
       <div className="max-w-sm mx-auto space-y-3 mb-6">
         <input
           placeholder="Title"
@@ -154,10 +135,7 @@ export function LaunchTab() {
         />
 
         {localPreviewUrl && (
-          <img
-            src={localPreviewUrl}
-            className="w-full rounded border object-cover"
-          />
+          <img src={localPreviewUrl} className="w-full rounded border" />
         )}
 
         <button
@@ -170,23 +148,22 @@ export function LaunchTab() {
         </button>
       </div>
 
-      {/* DRAFTS */}
       <div className="max-w-sm mx-auto space-y-3">
-        {drafts.map((d) => (
-          <div key={d.id} className="border rounded p-3 bg-[#0a0a0a]">
+        {drafts.map((draft) => (
+          <div key={draft.id} className="border rounded p-3 bg-[#0a0a0a]">
             <div className="flex gap-3">
               <img
-                src={resolveIpfs(d.imageUrl)}
+                src={resolveIpfs(draft.imageUrl)}
                 className="w-14 h-14 rounded object-cover"
               />
               <div className="flex-1">
-                <p className="text-sm font-bold">{d.title}</p>
+                <p className="text-sm font-bold">{draft.title}</p>
                 <p className="text-[10px] text-gray-500 truncate">
-                  {d.description}
+                  {draft.description}
                 </p>
               </div>
               <button
-                onClick={() => handleCoinIt(d)}
+                onClick={() => handleCoinIt(draft)}
                 className="text-xs bg-[#00ff41] text-black px-2 rounded font-black"
               >
                 Coin It
@@ -196,57 +173,24 @@ export function LaunchTab() {
         ))}
       </div>
 
-      {/* PREVIEW */}
-      <div className="max-w-sm mx-auto mt-6 border rounded p-4 bg-[#0a0a0a]">
-        <p className="text-xs font-black text-[#00ff41] mb-2">
-          Search Creator Coin
-        </p>
-        <input
-          className="w-full bg-[#0a0a0a] border p-2 text-xs rounded font-mono"
-          value={searchCreatorCoin}
-          onChange={(e) => setSearchCreatorCoin(e.target.value)}
-        />
-
-        <p className="text-xs font-black text-[#00ff41] mt-4 mb-2">
-          Pair content to a creator coin
-        </p>
-
-        <input
-          className="w-full bg-[#0a0a0a] border p-2 text-xs rounded font-mono"
-          value={creatorCoinAddress}
-          onChange={(e) => setCreatorCoinAddress(e.target.value)}
-        />
-
-        {!previewIntent ? (
-          <p className="text-[11px] text-gray-500 mt-3">
-            Select a draft and click <b>Coin It</b>.
+      {previewIntent && (
+        <div className="max-w-sm mx-auto mt-6 border rounded p-4 bg-black/30">
+          <p className="text-sm font-bold">{previewIntent.tokenName}</p>
+          <p className="text-sm">${previewIntent.ticker}</p>
+          <p className="text-xs text-gray-300">
+            {previewIntent.description}
           </p>
-        ) : (
-          <div className="mt-4 border rounded p-4 bg-black/30">
-            <p className="text-sm font-bold">{previewIntent.tokenName}</p>
-            <p className="text-sm font-bold">${previewIntent.ticker}</p>
-            <p className="text-[11px] text-gray-300">
-              {previewIntent.description}
-            </p>
 
-            <img
-              src={resolveIpfs(previewIntent.imageUrl)}
-              className="w-full rounded border mt-2"
-            />
+          <img
+            src={resolveIpfs(previewIntent.imageUrl)}
+            className="w-full rounded border mt-2"
+          />
 
-            <div className="mt-3 border-t pt-3">
-              <p className="text-[10px] text-gray-500">YOU RECEIVE</p>
-              <p className="text-base font-black text-[#00ff41]">
-                {formatSupply1B(previewIntent.ticker)}
-              </p>
-            </div>
-
-            <p className="text-[11px] text-gray-500 mt-2">
-              Phase 1 stops here.
-            </p>
-          </div>
-        )}
-      </div>
+          <p className="mt-3 text-[#00ff41] font-black">
+            {formatSupply1B(previewIntent.ticker)}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
