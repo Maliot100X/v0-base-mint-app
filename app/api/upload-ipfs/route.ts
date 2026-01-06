@@ -1,92 +1,60 @@
 import { NextResponse } from "next/server";
 
-export const runtime = "nodejs";
-
-function json(status: number, body: any) {
-  return NextResponse.json(body, { status });
-}
+export const runtime = "edge";
 
 export async function POST(req: Request) {
   try {
     const PINATA_JWT = process.env.PINATA_JWT;
 
-    // 🔎 DEBUG — TEMPORARY
-    console.log("PINATA_JWT exists:", !!PINATA_JWT);
-
     if (!PINATA_JWT) {
-      return json(400, {
-        ok: false,
-        error: "Missing env PINATA_JWT. Add it in Vercel Environment Variables.",
-      });
+      return NextResponse.json(
+        { ok: false, error: "Missing PINATA_JWT" },
+        { status: 400 }
+      );
     }
 
     const formData = await req.formData();
     const file = formData.get("file");
 
-    if (!file || !(file instanceof File)) {
-      return json(400, {
-        ok: false,
-        error: "No file uploaded (field name: file)",
-      });
+    if (!file) {
+      return NextResponse.json(
+        { ok: false, error: "No file uploaded" },
+        { status: 400 }
+      );
     }
 
     const pinataForm = new FormData();
-    pinataForm.append("file", file, file.name);
+    pinataForm.append("file", file);
 
-    // Optional metadata
-    pinataForm.append(
-      "pinataMetadata",
-      JSON.stringify({
-        name: file.name,
-        keyvalues: {
-          app: "BaseMint",
+    const res = await fetch(
+      "https://api.pinata.cloud/pinning/pinFileToIPFS",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${PINATA_JWT}`,
         },
-      })
+        body: pinataForm,
+      }
     );
 
-    const r = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${PINATA_JWT}`,
-      },
-      body: pinataForm,
-    });
+    const json = await res.json();
 
-    const text = await r.text();
-    let parsed: any = null;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      // keep raw text
+    if (!res.ok) {
+      return NextResponse.json(
+        { ok: false, error: "Pinata failed", details: json },
+        { status: res.status }
+      );
     }
 
-    if (!r.ok) {
-      return json(r.status, {
-        ok: false,
-        error: "Pinata upload failed",
-        status: r.status,
-        details: parsed ?? text,
-      });
-    }
-
-    const cid = parsed?.IpfsHash;
-    if (!cid) {
-      return json(500, {
-        ok: false,
-        error: "Pinata response missing IpfsHash",
-        details: parsed,
-      });
-    }
-
-    return json(200, {
+    return NextResponse.json({
       ok: true,
-      cid,
-      ipfsUrl: `ipfs://${cid}`,
+      cid: json.IpfsHash,
+      ipfsUrl: `ipfs://${json.IpfsHash}`,
     });
   } catch (e: any) {
-    return json(500, {
-      ok: false,
-      error: e?.message || "upload-ipfs failed",
-    });
+    return NextResponse.json(
+      { ok: false, error: e?.message || "upload-ipfs crashed" },
+      { status: 500 }
+    );
   }
 }
