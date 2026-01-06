@@ -34,10 +34,8 @@ export function LaunchTab() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Phase-1 UI: “Search Creator Coin”
   const [searchCreatorCoin, setSearchCreatorCoin] = useState("");
 
-  // This is NOT used to send tx in Phase-1.
   const [creatorCoinAddress, setCreatorCoinAddress] = useState(
     "0x0000000000000000000000000000000000000000"
   );
@@ -47,24 +45,26 @@ export function LaunchTab() {
     const d = getDraftsByCreator(address);
     setDrafts(d);
 
-    // Restore preview if user had already “Coin It” on a draft previously
-    // (this is the Phase-1 regression fix at the UI level).
     if (selectedDraftId) {
       const existing = getCoinIntentByContent(selectedDraftId);
       if (existing) setPreviewIntent(existing);
     }
-  }, [address]); // intentionally only when wallet changes
+  }, [address, selectedDraftId]);
 
   const localPreviewUrl = useMemo(() => {
     if (!imageFile) return "";
     return URL.createObjectURL(imageFile);
   }, [imageFile]);
 
+  // ============================
+  // CREATE DRAFT (LOCAL + GLOBAL)
+  // ============================
   async function handleCreateDraft() {
     if (!address || !title || !imageFile) return;
 
     setIsUploading(true);
     try {
+      // 1. Upload image to IPFS
       const formData = new FormData();
       formData.append("file", imageFile);
 
@@ -76,9 +76,12 @@ export function LaunchTab() {
       if (!res.ok) throw new Error("IPFS upload failed");
 
       const data = await res.json();
-      const ipfsUrl = data?.ipfsUrl || (data?.cid ? `ipfs://${data.cid}` : null);
+      const ipfsUrl =
+        data?.ipfsUrl || (data?.cid ? `ipfs://${data.cid}` : null);
+
       if (!ipfsUrl) throw new Error("No CID returned");
 
+      // 2. Save locally (existing behavior)
       createDraftContent({
         creatorWallet: address,
         title,
@@ -87,12 +90,26 @@ export function LaunchTab() {
         imageUrl: ipfsUrl,
       });
 
+      // 3. SAVE GLOBALLY (THIS WAS THE MISSING PART)
+      await fetch("/api/content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          creatorAddress: address,
+          creatorName: "BaseMint",
+          imageUrl: ipfsUrl,
+          title,
+          description,
+        }),
+      });
+
+      // 4. Reset UI
       setTitle("");
       setDescription("");
       setImageFile(null);
-
-      const d = getDraftsByCreator(address);
-      setDrafts(d);
+      setDrafts(getDraftsByCreator(address));
+    } catch (err) {
+      console.error("Create draft failed", err);
     } finally {
       setIsUploading(false);
     }
@@ -106,7 +123,6 @@ export function LaunchTab() {
     const intent = getOrCreateCoinIntent({
       contentId: draft.id,
       creatorAddress: address,
-      // Keep existing Phase-1 behavior. Do not guess Farcaster username here.
       creatorName: "BaseMint",
       contentText: draft.description || draft.title,
       imageUrl: draft.imageUrl,
@@ -122,7 +138,7 @@ export function LaunchTab() {
         Create Content
       </h2>
 
-      {/* CONTENT CREATE */}
+      {/* CREATE CONTENT */}
       <div className="max-w-sm mx-auto space-y-3 mb-6">
         <input
           placeholder="Title"
@@ -189,7 +205,7 @@ export function LaunchTab() {
         ))}
       </div>
 
-      {/* PHASE-1: COIN INTENT + PREVIEW (EMERGE STYLE) */}
+      {/* COIN PREVIEW */}
       <div className="max-w-sm mx-auto mt-6 space-y-3">
         <div className="border rounded p-4 bg-[#0a0a0a]">
           <p className="text-xs font-black text-[#00ff41] mb-2">
@@ -197,7 +213,7 @@ export function LaunchTab() {
           </p>
           <input
             className="w-full bg-[#0a0a0a] border p-2 text-xs rounded font-mono"
-            placeholder="Search by creator / address / handle (Phase 1 UI only)"
+            placeholder="Search by creator / address / handle"
             value={searchCreatorCoin}
             onChange={(e) => setSearchCreatorCoin(e.target.value)}
           />
@@ -206,7 +222,6 @@ export function LaunchTab() {
             Pair content to a creator coin
           </p>
 
-          {/* Keep the address field (Phase-1 intent only, NO TX). */}
           <input
             className="w-full bg-[#0a0a0a] border p-2 text-xs rounded font-mono"
             value={creatorCoinAddress}
@@ -215,51 +230,42 @@ export function LaunchTab() {
 
           {!previewIntent ? (
             <p className="text-[11px] text-gray-500 mt-3">
-              Select a draft and click <span className="font-bold">Coin It</span>{" "}
-              to preview the creator coin configuration.
+              Select a draft and click <b>Coin It</b> to preview the creator coin.
             </p>
           ) : (
             <div className="mt-4 border rounded p-4 bg-black/30">
-              <p className="text-xs text-gray-400 mb-2">Creator Coin Preview</p>
+              <p className="text-xs text-gray-400 mb-2">
+                Creator Coin Preview
+              </p>
 
-              <div className="space-y-2">
-                <div>
-                  <p className="text-[10px] text-gray-500">Token Name</p>
-                  <p className="text-sm font-bold">{previewIntent.tokenName}</p>
-                </div>
+              <p className="text-sm font-bold">
+                {previewIntent.tokenName}
+              </p>
+              <p className="text-sm font-bold">
+                ${previewIntent.ticker}
+              </p>
+              <p className="text-[11px] text-gray-300">
+                {previewIntent.description}
+              </p>
 
-                <div>
-                  <p className="text-[10px] text-gray-500">Ticker</p>
-                  <p className="text-sm font-bold">${previewIntent.ticker}</p>
-                </div>
+              {previewIntent.imageUrl && (
+                <img
+                  src={resolveIpfs(previewIntent.imageUrl)}
+                  className="w-full rounded border mt-2"
+                  alt="Coin preview"
+                />
+              )}
 
-                <div>
-                  <p className="text-[10px] text-gray-500">Description</p>
-                  <p className="text-[11px] text-gray-300">
-                    {previewIntent.description}
-                  </p>
-                </div>
-
-                {previewIntent.imageUrl && (
-                  <img
-                    src={resolveIpfs(previewIntent.imageUrl)}
-                    className="w-full rounded border mt-2"
-                    alt="Coin preview"
-                  />
-                )}
-
-                <div className="mt-3 border-t pt-3">
-                  <p className="text-[10px] text-gray-500">YOU RECEIVE</p>
-                  <p className="text-base font-black text-[#00ff41]">
-                    {formatSupply1B(previewIntent.ticker)}
-                  </p>
-                </div>
-
-                {/* Phase 1 STOP message (no minting, no Zora, no tx) */}
-                <p className="text-[11px] text-gray-500 mt-2">
-                  Phase 1 stops here: Draft → Coin Intent → Preview.
+              <div className="mt-3 border-t pt-3">
+                <p className="text-[10px] text-gray-500">YOU RECEIVE</p>
+                <p className="text-base font-black text-[#00ff41]">
+                  {formatSupply1B(previewIntent.ticker)}
                 </p>
               </div>
+
+              <p className="text-[11px] text-gray-500 mt-2">
+                Phase 1 stops here: Draft → Coin Intent → Preview.
+              </p>
             </div>
           )}
         </div>
