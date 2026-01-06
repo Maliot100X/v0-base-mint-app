@@ -8,16 +8,48 @@ export interface CoinIntent {
   creatorAddress: string;
   creatorName: string;
   creatorCoinAddress?: string;
+
   tokenName: string;
   ticker: string;
   description: string;
+
   imageUrl?: string;
   supply: string; // 1B
   status: CoinIntentStatus;
   createdAt: number;
 }
 
-const coinIntents: CoinIntent[] = [];
+const STORAGE_KEY = "basemint.coinIntents.v1";
+
+function safeRead(): CoinIntent[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as CoinIntent[];
+  } catch {
+    return [];
+  }
+}
+
+function safeWrite(intents: CoinIntent[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(intents));
+  } catch {
+    // ignore write failures (private mode, storage full, etc.)
+  }
+}
+
+function upsert(intent: CoinIntent) {
+  const intents = safeRead();
+  const idx = intents.findIndex((i) => i.id === intent.id);
+  if (idx >= 0) intents[idx] = intent;
+  else intents.push(intent);
+  safeWrite(intents);
+}
 
 function generateTokenMeta(params: { creatorName: string }) {
   const creatorName = params.creatorName || "BaseMint";
@@ -60,14 +92,33 @@ export function createCoinIntent(params: {
     createdAt: Date.now(),
   };
 
-  coinIntents.push(intent);
+  upsert(intent);
   return intent;
 }
 
 export function getCoinIntentsByCreator(address: string) {
-  return coinIntents.filter((i) => i.creatorAddress === address);
+  const intents = safeRead();
+  return intents.filter((i) => i.creatorAddress === address);
 }
 
 export function getCoinIntentByContent(contentId: string) {
-  return coinIntents.find((i) => i.contentId === contentId);
+  const intents = safeRead();
+  return intents.find((i) => i.contentId === contentId);
+}
+
+/**
+ * Phase-1 helper: if you "Coin It" again, we want the same intent back,
+ * not a new one (prevents preview regressions).
+ */
+export function getOrCreateCoinIntent(params: {
+  contentId: string;
+  creatorAddress: string;
+  creatorName: string;
+  contentText: string;
+  imageUrl?: string;
+  creatorCoinAddress?: string;
+}) {
+  const existing = getCoinIntentByContent(params.contentId);
+  if (existing) return existing;
+  return createCoinIntent(params);
 }
