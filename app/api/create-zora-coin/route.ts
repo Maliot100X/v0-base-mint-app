@@ -2,72 +2,73 @@ import { NextResponse } from "next/server";
 import { createCoinCall, CreateConstants } from "@zoralabs/coins-sdk";
 import { Address } from "viem";
 
+export const runtime = "nodejs";
+
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-
     const {
       creator,
       name,
       symbol,
-      image,
+      image,        // ipfs://CID
       description,
       platformReferrer,
-    } = body;
+    } = await req.json();
 
     if (!creator || !name || !symbol || !image) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { success: false, error: "Missing required fields" },
         { status: 400 }
       );
     }
 
-    // 🔹 Build proper metadata JSON
+    const PINATA_JWT = process.env.PINATA_JWT;
+    if (!PINATA_JWT) {
+      throw new Error("Missing PINATA_JWT");
+    }
+
+    // 1️⃣ Build Zora metadata JSON
     const metadata = {
       name,
       symbol,
       description: description || "",
       image,
-      attributes: [
-        { trait_type: "source", value: "BaseMint" },
-        { trait_type: "type", value: "Creator Coin" },
-      ],
     };
 
-    // 🔹 Upload metadata JSON to IPFS via Pinata
-    const pinataRes = await fetch(
+    // 2️⃣ Upload metadata JSON to Pinata
+    const pinRes = await fetch(
       "https://api.pinata.cloud/pinning/pinJSONToIPFS",
       {
         method: "POST",
         headers: {
+          Authorization: `Bearer ${PINATA_JWT}`,
           "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.PINATA_JWT}`,
         },
         body: JSON.stringify(metadata),
       }
     );
 
-    if (!pinataRes.ok) {
-      const text = await pinataRes.text();
-      throw new Error("Pinata metadata upload failed: " + text);
+    if (!pinRes.ok) {
+      const err = await pinRes.text();
+      throw new Error("Pinata JSON upload failed: " + err);
     }
 
-    const pinataData = await pinataRes.json();
-    const metadataUri = `ipfs://${pinataData.IpfsHash}`;
+    const pinJson = await pinRes.json();
+    const metadataUri = `ipfs://${pinJson.IpfsHash}`;
 
-    // 🔹 Create Zora coin transaction
+    // 3️⃣ Call Zora Coins SDK (THIS NOW RETURNS CALLS)
     const result = await createCoinCall({
       creator: creator as Address,
       name,
       symbol,
       metadata: {
         type: "RAW_URI",
-        uri: metadataUri,
+        uri: metadataUri, // ✅ JSON, not image
       },
       currency: CreateConstants.ContentCoinCurrencies.ZORA,
       chainId: 8453, // Base mainnet
       startingMarketCap: CreateConstants.StartingMarketCaps.LOW,
-      platformReferrer: platformReferrer as Address,
+      platformReferrer: platformReferrer as Address | undefined,
     });
 
     if (!result.calls || result.calls.length === 0) {
@@ -78,17 +79,18 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
+      metadataUri,
       predictedCoinAddress: result.predictedCoinAddress,
       transaction: {
         to: tx.to,
         data: tx.data,
-        value: tx.value.toString(),
+        value: tx.value?.toString() ?? "0",
       },
     });
   } catch (err: any) {
-    console.error("create-zora-coin error:", err);
+    console.error("Zora coin creation failed:", err);
     return NextResponse.json(
-      { error: err.message || "Create coin failed" },
+      { success: false, error: err.message },
       { status: 500 }
     );
   }
