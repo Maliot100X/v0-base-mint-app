@@ -9,7 +9,7 @@ import {
   createDraftContent,
   getDraftsByCreator,
   DraftContent,
-  markDraftRegistered,
+  markDraftAsCoined,
 } from "@/lib/contentStore";
 
 import {
@@ -50,7 +50,7 @@ export function LaunchTab() {
   );
 
   // =========================
-  // CREATE DRAFT
+  // CREATE DRAFT (IMAGE → IPFS)
   // =========================
   async function handleCreateDraft() {
     if (!address || !title || !imageFile) return;
@@ -66,6 +66,7 @@ export function LaunchTab() {
       });
 
       if (!res.ok) throw new Error("IPFS upload failed");
+
       const data = await res.json();
 
       createDraftContent({
@@ -86,87 +87,79 @@ export function LaunchTab() {
   }
 
   // =========================
-  // COIN IT (REAL ZORA FLOW)
+  // COIN IT (REAL FLOW)
   // =========================
   async function handleCoinIt(draft: DraftContent) {
     if (!address || !wallet) {
-      alert("Connect wallet first");
+      alert("Wallet not connected");
       return;
     }
 
-    // 🔒 STEP 1 — REGISTER CONTENT (REAL MINT)
-    if (draft.status === "draft") {
-      try {
-        // 1️⃣ Build metadata JSON
-        const metadata = {
-          name: draft.title,
-          description: draft.description,
-          image: draft.imageUrl,
-          external_url: "https://v0-base-mint-app.vercel.app",
-          attributes: [
-            { trait_type: "Platform", value: "BaseMint" },
-            { trait_type: "Type", value: "Content" },
-          ],
-        };
+    try {
+      // 1️⃣ Build metadata JSON (NO PINATA HERE)
+      const metadata = {
+        name: draft.title,
+        description: draft.description,
+        image: draft.imageUrl,
+        external_url: "https://v0-base-mint-app.vercel.app",
+        attributes: [
+          { trait_type: "Platform", value: "BaseMint" },
+          { trait_type: "Type", value: "Content" },
+        ],
+      };
 
-        // 2️⃣ Upload metadata JSON to Pinata
-        const metaRes = await fetch(
-          "https://api.pinata.cloud/pinning/pinJSONToIPFS",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${process.env.NEXT_PUBLIC_PINATA_JWT}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ pinataContent: metadata }),
-          }
-        );
+      // 2️⃣ SERVER uploads metadata to Pinata
+      const metaRes = await fetch("/api/upload-metadata", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(metadata),
+      });
 
-        const metaData = await metaRes.json();
-        if (!metaData?.IpfsHash) {
-          throw new Error("Metadata upload failed");
-        }
-
-        const metadataUri = `ipfs://${metaData.IpfsHash}`;
-
-        // 3️⃣ Prepare REAL Zora content mint
-        const tx = prepareZoraContentMint({
-          creator: address as any,
-          metadataUri,
-        });
-
-        alert("Confirm content mint in wallet (cheap Base tx)");
-
-        // 4️⃣ Wallet signs transaction
-        await wallet.sendTransaction({
-          to: tx.to,
-          data: tx.data,
-          value: tx.value,
-        });
-
-        // 5️⃣ Mark content as registered
-        markDraftRegistered(draft.id);
-        setDrafts(getDraftsByCreator(address));
-
-        alert("Content registered. Click Coin It again to create coin.");
-        return;
-      } catch (e: any) {
-        alert(e.message || "Content mint failed");
-        return;
+      const metaData = await metaRes.json();
+      if (!metaData?.metadataUri) {
+        throw new Error("Metadata upload failed");
       }
+
+      const metadataUri = metaData.metadataUri;
+
+      // 3️⃣ Prepare Zora content mint
+      const tx = await prepareZoraContentMint({
+        creator: address as any,
+        name: draft.title,
+        description: draft.description,
+        metadataUri,
+        platformReferrer: address as any,
+      });
+
+      // 4️⃣ Wallet signs real tx
+      alert("Confirm content mint in wallet (small Base fee)");
+
+      await wallet.sendTransaction({
+        to: tx.to,
+        data: tx.data,
+        value: BigInt(tx.value),
+      });
+
+      // 5️⃣ Mark registered
+      markDraftAsCoined(draft.id);
+      setDrafts(getDraftsByCreator(address));
+
+      // 6️⃣ Now coin is allowed
+      const intent = getOrCreateCoinIntent({
+        contentId: draft.id,
+        creatorAddress: address,
+        creatorName: "BaseMint",
+        contentText: draft.description || draft.title,
+        imageUrl: draft.imageUrl,
+        creatorCoinAddress,
+      });
+
+      setPreviewIntent(intent);
+
+      alert("Content registered onchain. You can now create a real coin.");
+    } catch (e: any) {
+      alert(e.message || "Content registration failed");
     }
-
-    // 🔓 STEP 2 — CONTENT IS NOW COINABLE
-    const intent = getOrCreateCoinIntent({
-      contentId: draft.id,
-      creatorAddress: address,
-      creatorName: "BaseMint",
-      contentText: draft.description || draft.title,
-      imageUrl: draft.imageUrl,
-      creatorCoinAddress,
-    });
-
-    setPreviewIntent(intent);
   }
 
   return (
@@ -175,7 +168,6 @@ export function LaunchTab() {
         Create Content
       </h2>
 
-      {/* CREATE CONTENT */}
       <div className="max-w-sm mx-auto space-y-3 mb-6">
         <input
           placeholder="Title"
@@ -198,10 +190,7 @@ export function LaunchTab() {
         />
 
         {localPreviewUrl && (
-          <img
-            src={localPreviewUrl}
-            className="w-full rounded border object-cover"
-          />
+          <img src={localPreviewUrl} className="w-full rounded border" />
         )}
 
         <button
@@ -214,7 +203,6 @@ export function LaunchTab() {
         </button>
       </div>
 
-      {/* DRAFT LIST */}
       <div className="max-w-sm mx-auto space-y-3">
         {drafts.map((draft) => (
           <div key={draft.id} className="border rounded p-3 bg-[#0a0a0a]">
@@ -243,11 +231,10 @@ export function LaunchTab() {
         ))}
       </div>
 
-      {/* PREVIEW */}
       {previewIntent && (
         <div className="max-w-sm mx-auto mt-6 border rounded p-4 bg-black/30">
           <p className="text-sm font-bold">{previewIntent.tokenName}</p>
-          <p className="text-sm font-bold">${previewIntent.ticker}</p>
+          <p className="text-sm">${previewIntent.ticker}</p>
           <img
             src={resolveIpfs(previewIntent.imageUrl)}
             className="w-full rounded border mt-2"
