@@ -1,6 +1,3 @@
-// lib/contentStore.ts
-// Draft + registration state (client-only, persisted)
-
 export type DraftContentStatus = "draft" | "registered" | "coined";
 
 export type DraftContent = {
@@ -14,38 +11,21 @@ export type DraftContent = {
   createdAt: number;
 };
 
-const STORAGE_KEY = "basemint_drafts_v2";
-
-let _drafts: DraftContent[] = [];
-
-function isBrowser() {
-  return typeof window !== "undefined";
-}
+const KEY = "basemint_drafts_v2";
+let drafts: DraftContent[] = [];
 
 function load() {
-  if (!isBrowser()) return;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) _drafts = parsed;
-    }
-  } catch {}
+  if (typeof window === "undefined") return;
+  drafts = JSON.parse(localStorage.getItem(KEY) || "[]");
 }
 
 function save() {
-  if (!isBrowser()) return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(_drafts));
-  } catch {}
+  if (typeof window === "undefined") return;
+  localStorage.setItem(KEY, JSON.stringify(drafts));
 }
 
-function ensureLoaded() {
-  if (_drafts.length === 0) load();
-}
-
-function genId() {
-  return `dc_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+function id() {
+  return `dc_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
 export function createDraftContent(input: {
@@ -54,11 +34,10 @@ export function createDraftContent(input: {
   description: string;
   prompt: string;
   imageUrl: string;
-}): DraftContent {
-  ensureLoaded();
-
-  const draft: DraftContent = {
-    id: genId(),
+}) {
+  load();
+  const d: DraftContent = {
+    id: id(),
     creatorWallet: input.creatorWallet.toLowerCase(),
     title: input.title,
     description: input.description,
@@ -67,31 +46,21 @@ export function createDraftContent(input: {
     status: "draft",
     createdAt: Date.now(),
   };
-
-  _drafts = [draft, ..._drafts];
+  drafts.unshift(d);
   save();
-  return draft;
+  return d;
 }
 
-export function getDraftsByCreator(wallet: string): DraftContent[] {
-  ensureLoaded();
-  return _drafts.filter(
-    (d) => d.creatorWallet === wallet.toLowerCase()
-  );
+export function getDraftsByCreator(wallet: string) {
+  load();
+  return drafts.filter((d) => d.creatorWallet === wallet.toLowerCase());
 }
 
-export function markDraftAsRegistered(id: string) {
-  ensureLoaded();
-  const i = _drafts.findIndex((d) => d.id === id);
-  if (i === -1) return;
-  _drafts[i] = { ..._drafts[i], status: "registered" };
-  save();
-}
-
-export function markDraftAsCoined(id: string) {
-  ensureLoaded();
-  const i = _drafts.findIndex((d) => d.id === id);
-  if (i === -1) return;
-  _drafts[i] = { ..._drafts[i], status: "coined" };
-  save();
+export function markDraftRegistered(id: string) {
+  load();
+  const i = drafts.findIndex((d) => d.id === id);
+  if (i !== -1) {
+    drafts[i].status = "registered";
+    save();
+  }
 }
