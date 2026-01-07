@@ -1,21 +1,18 @@
 // lib/contentStore.ts
-// Internal content layer (drafts). Persisted to localStorage (client only).
+// Draft + registration state (client-only, persisted)
 
 export type DraftContentStatus = "draft" | "registered" | "coined";
 
 export type DraftContent = {
   id: string;
   creatorWallet: string;
-  creatorFid?: number;
   title: string;
   description: string;
   prompt: string;
-  imageUrl: string; // ipfs://...
+  imageUrl: string;
   status: DraftContentStatus;
-  createdAt: number; // unix ms
+  createdAt: number;
 };
-
-/** ---------------- STORAGE ---------------- */
 
 const STORAGE_KEY = "basemint_drafts_v2";
 
@@ -25,44 +22,34 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
-function loadFromStorage() {
+function load() {
   if (!isBrowser()) return;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) _drafts = parsed as DraftContent[];
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) _drafts = parsed;
+    }
   } catch {}
 }
 
-function saveToStorage() {
+function save() {
   if (!isBrowser()) return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(_drafts));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(_drafts));
   } catch {}
 }
 
 function ensureLoaded() {
-  if (_drafts.length === 0) loadFromStorage();
-}
-
-function nowMs() {
-  return Date.now();
+  if (_drafts.length === 0) load();
 }
 
 function genId() {
-  return `dc_${nowMs()}_${Math.random().toString(16).slice(2, 10)}`;
+  return `dc_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
 }
-
-function normWallet(addr: string) {
-  return (addr || "").trim().toLowerCase();
-}
-
-/** ---------------- DRAFTS ---------------- */
 
 export function createDraftContent(input: {
   creatorWallet: string;
-  creatorFid?: number;
   title: string;
   description: string;
   prompt: string;
@@ -70,63 +57,41 @@ export function createDraftContent(input: {
 }): DraftContent {
   ensureLoaded();
 
-  const creatorWallet = normWallet(input.creatorWallet);
-  if (!creatorWallet) {
-    throw new Error("createDraftContent: creatorWallet is required");
-  }
-
   const draft: DraftContent = {
     id: genId(),
-    creatorWallet,
-    creatorFid: input.creatorFid,
-    title: input.title.trim(),
-    description: input.description.trim(),
-    prompt: input.prompt.trim(),
-    imageUrl: input.imageUrl.trim(),
+    creatorWallet: input.creatorWallet.toLowerCase(),
+    title: input.title,
+    description: input.description,
+    prompt: input.prompt,
+    imageUrl: input.imageUrl,
     status: "draft",
-    createdAt: nowMs(),
+    createdAt: Date.now(),
   };
 
   _drafts = [draft, ..._drafts];
-  saveToStorage();
+  save();
   return draft;
-}
-
-export function getAllDraftContent(): DraftContent[] {
-  ensureLoaded();
-  return [..._drafts];
 }
 
 export function getDraftsByCreator(wallet: string): DraftContent[] {
   ensureLoaded();
-  const w = normWallet(wallet);
-  if (!w) return [];
-  return _drafts.filter((d) => d.creatorWallet === w);
+  return _drafts.filter(
+    (d) => d.creatorWallet === wallet.toLowerCase()
+  );
 }
 
-/** ---------------- REGISTRATION ---------------- */
-
-export function markDraftAsRegistered(id: string): DraftContent | null {
+export function markDraftAsRegistered(id: string) {
   ensureLoaded();
-  const idx = _drafts.findIndex((d) => d.id === id);
-  if (idx === -1) return null;
-
-  _drafts[idx] = { ..._drafts[idx], status: "registered" };
-  saveToStorage();
-  return _drafts[idx];
+  const i = _drafts.findIndex((d) => d.id === id);
+  if (i === -1) return;
+  _drafts[i] = { ..._drafts[i], status: "registered" };
+  save();
 }
 
-export function markDraftAsCoined(id: string): DraftContent | null {
+export function markDraftAsCoined(id: string) {
   ensureLoaded();
-  const idx = _drafts.findIndex((d) => d.id === id);
-  if (idx === -1) return null;
-
-  _drafts[idx] = { ..._drafts[idx], status: "coined" };
-  saveToStorage();
-  return _drafts[idx];
-}
-
-export function __dangerousResetContentStore() {
-  _drafts = [];
-  saveToStorage();
+  const i = _drafts.findIndex((d) => d.id === id);
+  if (i === -1) return;
+  _drafts[i] = { ..._drafts[i], status: "coined" };
+  save();
 }

@@ -82,7 +82,7 @@ export function LaunchTab() {
   function handleCoinIt(draft: DraftContent) {
     if (!address) return;
 
-    // 🔒 STEP 1 — CONTENT MUST BE REGISTERED FIRST
+    // STEP 1 — REGISTER CONTENT
     if (draft.status === "draft") {
       alert("Registering content (simulated mint)");
       markDraftAsRegistered(draft.id);
@@ -91,7 +91,7 @@ export function LaunchTab() {
       return;
     }
 
-    // 🔓 STEP 2 — NOW IT IS COINABLE
+    // STEP 2 — COINABLE
     const intent = getOrCreateCoinIntent({
       contentId: draft.id,
       creatorAddress: address,
@@ -177,10 +177,12 @@ export function LaunchTab() {
         <div className="max-w-sm mx-auto mt-6 border rounded p-4 bg-black/30">
           <p className="text-sm font-bold">{previewIntent.tokenName}</p>
           <p className="text-sm">${previewIntent.ticker}</p>
+
           <img
             src={resolveIpfs(previewIntent.imageUrl)}
             className="w-full rounded border mt-2"
           />
+
           <p className="mt-3 text-[#00ff41] font-black">
             {formatSupply1B(previewIntent.ticker)}
           </p>
