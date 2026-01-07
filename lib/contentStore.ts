@@ -24,6 +24,8 @@ const STORAGE_KEY = "basemint_drafts_v2";
 
 let _drafts: DraftContent[] = [];
 
+/* ---------------- INTERNAL ---------------- */
+
 function isBrowser() {
   return typeof window !== "undefined";
 }
@@ -82,9 +84,17 @@ export function createDraftContent(input: {
   return draft;
 }
 
-export function getDraftsByCreator(wallet: string) {
+export function getDraftsByCreator(wallet: string): DraftContent[] {
   ensureLoaded();
   return _drafts.filter((d) => d.creatorWallet === norm(wallet));
+}
+
+/* ---------------- HOME TAB (REQUIRED) ---------------- */
+/* 🔥 THIS IS WHAT WAS MISSING AND CRASHING YOUR APP */
+
+export function getAllDraftContent(): DraftContent[] {
+  ensureLoaded();
+  return [..._drafts];
 }
 
 /* ---------------- REGISTRATION ---------------- */
@@ -94,7 +104,7 @@ export function markDraftRegistered(input: {
   contentContract: string;
   tokenId: string;
   txHash: string;
-}) {
+}): DraftContent | null {
   ensureLoaded();
 
   const i = _drafts.findIndex((d) => d.id === input.draftId);
@@ -110,4 +120,28 @@ export function markDraftRegistered(input: {
 
   save();
   return _drafts[i];
+}
+
+/* ---------------- COINED ---------------- */
+
+export function markDraftAsCoined(draftId: string): DraftContent | null {
+  ensureLoaded();
+
+  const i = _drafts.findIndex((d) => d.id === draftId);
+  if (i === -1) return null;
+
+  _drafts[i] = {
+    ..._drafts[i],
+    status: "coined",
+  };
+
+  save();
+  return _drafts[i];
+}
+
+/* ---------------- DEV RESET ---------------- */
+
+export function __dangerousResetContentStore() {
+  _drafts = [];
+  save();
 }
