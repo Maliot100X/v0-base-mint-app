@@ -9,7 +9,7 @@ import {
   createDraftContent,
   getDraftsByCreator,
   DraftContent,
-  markDraftAsCoined,
+  markDraftRegistered,
 } from "@/lib/contentStore";
 
 import {
@@ -18,6 +18,7 @@ import {
 } from "@/lib/coinIntentStore";
 
 import { prepareZoraContentMint } from "@/lib/zoraContentMint";
+import { extractZoraContentFromTx } from "@/lib/zoraReceipt";
 
 function formatSupply1B(ticker: string) {
   return `1B ${(ticker || "TOKEN").toUpperCase()}`;
@@ -49,9 +50,6 @@ export function LaunchTab() {
     [imageFile]
   );
 
-  // =========================
-  // CREATE DRAFT (IMAGE → IPFS)
-  // =========================
   async function handleCreateDraft() {
     if (!address || !title || !imageFile) return;
 
@@ -65,9 +63,8 @@ export function LaunchTab() {
         body: fd,
       });
 
-      if (!res.ok) throw new Error("IPFS upload failed");
-
       const data = await res.json();
+      if (!res.ok) throw new Error("IPFS upload failed");
 
       createDraftContent({
         creatorWallet: address,
@@ -77,76 +74,68 @@ export function LaunchTab() {
         imageUrl: data.ipfsUrl,
       });
 
+      setDrafts(getDraftsByCreator(address));
       setTitle("");
       setDescription("");
       setImageFile(null);
-      setDrafts(getDraftsByCreator(address));
     } finally {
       setIsUploading(false);
     }
   }
 
-  // =========================
-  // COIN IT (REAL FLOW)
-  // =========================
   async function handleCoinIt(draft: DraftContent) {
-    if (!address || !wallet) {
+    if (!wallet || !address) {
       alert("Wallet not connected");
       return;
     }
 
     try {
-      // 1️⃣ Build metadata JSON (NO PINATA HERE)
-      const metadata = {
-        name: draft.title,
-        description: draft.description,
-        image: draft.imageUrl,
-        external_url: "https://v0-base-mint-app.vercel.app",
-        attributes: [
-          { trait_type: "Platform", value: "BaseMint" },
-          { trait_type: "Type", value: "Content" },
-        ],
-      };
+      // STEP 1 — REGISTER CONTENT IF NEEDED
+      if (draft.status === "draft") {
+        const metaRes = await fetch("/api/upload-metadata", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: draft.title,
+            description: draft.description,
+            image: draft.imageUrl,
+          }),
+        });
 
-      // 2️⃣ SERVER uploads metadata to Pinata
-      const metaRes = await fetch("/api/upload-metadata", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(metadata),
-      });
+        const meta = await metaRes.json();
+        if (!meta.metadataUri) throw new Error("Metadata upload failed");
 
-      const metaData = await metaRes.json();
-      if (!metaData?.metadataUri) {
-        throw new Error("Metadata upload failed");
+        const tx = await prepareZoraContentMint({
+          creator: address as any,
+          name: draft.title,
+          description: draft.description,
+          metadataUri: meta.metadataUri,
+          platformReferrer: address as any,
+        });
+
+        const hash = await wallet.sendTransaction({
+          to: tx.to,
+          data: tx.data,
+          value: BigInt(tx.value),
+        });
+
+        const content = await extractZoraContentFromTx(hash);
+
+        markDraftRegistered({
+          draftId: draft.id,
+          contentContract: content.contentContract,
+          tokenId: content.tokenId,
+          txHash: hash,
+        });
+
+        setDrafts(getDraftsByCreator(address));
+        alert("Content registered. Click Coin It again.");
+        return;
       }
 
-      const metadataUri = metaData.metadataUri;
-
-      // 3️⃣ Prepare Zora content mint
-      const tx = await prepareZoraContentMint({
-        creator: address as any,
-        name: draft.title,
-        description: draft.description,
-        metadataUri,
-        platformReferrer: address as any,
-      });
-
-      // 4️⃣ Wallet signs real tx
-      alert("Confirm content mint in wallet (small Base fee)");
-
-      await wallet.sendTransaction({
-        to: tx.to,
-        data: tx.data,
-        value: BigInt(tx.value),
-      });
-
-      // 5️⃣ Mark registered
-      markDraftAsCoined(draft.id);
-      setDrafts(getDraftsByCreator(address));
-
-      // 6️⃣ Now coin is allowed
+      // STEP 2 — NOW COINABLE
       const intent = getOrCreateCoinIntent({
-        contentId: draft.id,
+        contentId: `${draft.contentContract}:${draft.tokenId}`,
         creatorAddress: address,
         creatorName: "BaseMint",
         contentText: draft.description || draft.title,
@@ -155,10 +144,8 @@ export function LaunchTab() {
       });
 
       setPreviewIntent(intent);
-
-      alert("Content registered onchain. You can now create a real coin.");
     } catch (e: any) {
-      alert(e.message || "Content registration failed");
+      alert(e.message || "Coin It failed");
     }
   }
 
