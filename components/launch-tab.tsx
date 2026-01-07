@@ -9,6 +9,7 @@ import {
   createDraftContent,
   getDraftsByCreator,
   DraftContent,
+  markDraftAsRegistered,
 } from "@/lib/contentStore";
 
 import {
@@ -31,7 +32,6 @@ export function LaunchTab() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const [searchCreatorCoin, setSearchCreatorCoin] = useState("");
   const [creatorCoinAddress, setCreatorCoinAddress] = useState(
     "0x0000000000000000000000000000000000000000"
   );
@@ -41,49 +41,33 @@ export function LaunchTab() {
     setDrafts(getDraftsByCreator(address));
   }, [address]);
 
-  const localPreviewUrl = useMemo(() => {
-    return imageFile ? URL.createObjectURL(imageFile) : "";
-  }, [imageFile]);
+  const localPreviewUrl = useMemo(
+    () => (imageFile ? URL.createObjectURL(imageFile) : ""),
+    [imageFile]
+  );
 
-  // =========================
-  // CREATE DRAFT
-  // =========================
   async function handleCreateDraft() {
     if (!address || !title || !imageFile) return;
 
     setIsUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", imageFile);
+      const fd = new FormData();
+      fd.append("file", imageFile);
 
       const res = await fetch("/api/upload-ipfs", {
         method: "POST",
-        body: formData,
+        body: fd,
       });
 
       if (!res.ok) throw new Error("IPFS upload failed");
-
       const data = await res.json();
-      const ipfsUrl = data.ipfsUrl;
-      if (!ipfsUrl) throw new Error("Missing IPFS URL");
 
       createDraftContent({
         creatorWallet: address,
         title,
         description,
         prompt: title,
-        imageUrl: ipfsUrl,
-      });
-
-      await fetch("/api/content", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          creatorAddress: address,
-          imageUrl: ipfsUrl,
-          title,
-          description,
-        }),
+        imageUrl: data.ipfsUrl,
       });
 
       setTitle("");
@@ -95,12 +79,19 @@ export function LaunchTab() {
     }
   }
 
-  // =========================
-  // COIN IT (PREVIEW ONLY)
-  // =========================
   function handleCoinIt(draft: DraftContent) {
     if (!address) return;
 
+    // 🔒 STEP 1 — CONTENT MUST BE REGISTERED FIRST
+    if (draft.status === "draft") {
+      alert("Registering content (simulated mint)");
+      markDraftAsRegistered(draft.id);
+      setDrafts(getDraftsByCreator(address));
+      alert("Content registered. Click Coin It again.");
+      return;
+    }
+
+    // 🔓 STEP 2 — NOW IT IS COINABLE
     const intent = getOrCreateCoinIntent({
       contentId: draft.id,
       creatorAddress: address,
@@ -119,7 +110,6 @@ export function LaunchTab() {
         Create Content
       </h2>
 
-      {/* CREATE CONTENT */}
       <div className="max-w-sm mx-auto space-y-3 mb-6">
         <input
           placeholder="Title"
@@ -142,10 +132,7 @@ export function LaunchTab() {
         />
 
         {localPreviewUrl && (
-          <img
-            src={localPreviewUrl}
-            className="w-full rounded border object-cover"
-          />
+          <img src={localPreviewUrl} className="w-full rounded border" />
         )}
 
         <button
@@ -158,7 +145,6 @@ export function LaunchTab() {
         </button>
       </div>
 
-      {/* DRAFT LIST */}
       <div className="max-w-sm mx-auto space-y-3">
         {drafts.map((draft) => (
           <div key={draft.id} className="border rounded p-3 bg-[#0a0a0a]">
@@ -172,6 +158,9 @@ export function LaunchTab() {
                 <p className="text-[10px] text-gray-500 truncate">
                   {draft.description}
                 </p>
+                <p className="text-[10px] text-[#00ff41]">
+                  STATUS: {draft.status.toUpperCase()}
+                </p>
               </div>
               <button
                 onClick={() => handleCoinIt(draft)}
@@ -184,94 +173,19 @@ export function LaunchTab() {
         ))}
       </div>
 
-      {/* CREATOR COIN + PREVIEW */}
-      <div className="max-w-sm mx-auto mt-6 space-y-3">
-        <div className="border rounded p-4 bg-[#0a0a0a]">
-          <p className="text-xs font-black text-[#00ff41] mb-2">
-            Search Creator Coin
-          </p>
-
-          <input
-            className="w-full bg-[#0a0a0a] border p-2 text-xs rounded font-mono"
-            placeholder="Search by creator / address / handle"
-            value={searchCreatorCoin}
-            onChange={(e) => setSearchCreatorCoin(e.target.value)}
+      {previewIntent && (
+        <div className="max-w-sm mx-auto mt-6 border rounded p-4 bg-black/30">
+          <p className="text-sm font-bold">{previewIntent.tokenName}</p>
+          <p className="text-sm">${previewIntent.ticker}</p>
+          <img
+            src={resolveIpfs(previewIntent.imageUrl)}
+            className="w-full rounded border mt-2"
           />
-
-          <p className="text-xs font-black text-[#00ff41] mt-4 mb-2">
-            Pair content to a creator coin
+          <p className="mt-3 text-[#00ff41] font-black">
+            {formatSupply1B(previewIntent.ticker)}
           </p>
-
-          <input
-            className="w-full bg-[#0a0a0a] border p-2 text-xs rounded font-mono"
-            value={creatorCoinAddress}
-            onChange={(e) => setCreatorCoinAddress(e.target.value)}
-          />
-
-          {!previewIntent ? (
-            <p className="text-[11px] text-gray-500 mt-3">
-              Select a draft and click <b>Coin It</b>.
-            </p>
-          ) : (
-            <div className="mt-4 border rounded p-4 bg-black/30">
-              <p className="text-sm font-bold">
-                {previewIntent.tokenName}
-              </p>
-              <p className="text-sm font-bold">
-                ${previewIntent.ticker}
-              </p>
-              <p className="text-[11px] text-gray-300">
-                {previewIntent.description}
-              </p>
-
-              <img
-                src={resolveIpfs(previewIntent.imageUrl)}
-                className="w-full rounded border mt-2"
-              />
-
-              <div className="mt-3 border-t pt-3">
-                <p className="text-[10px] text-gray-500">YOU RECEIVE</p>
-                <p className="text-base font-black text-[#00ff41]">
-                  {formatSupply1B(previewIntent.ticker)}
-                </p>
-              </div>
-
-              {/* ✅ CREATE REAL COIN — ONLY ADDITION */}
-              <button
-                className="mt-4 w-full bg-[#00ff41] text-black font-black text-xs py-2 rounded"
-                onClick={async () => {
-                  if (!address || !previewIntent) return;
-
-                  const res = await fetch("/api/create-zora-coin", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      creator: address,
-                      name: previewIntent.tokenName,
-                      symbol: previewIntent.ticker,
-                      image: previewIntent.imageUrl,
-                      description: previewIntent.description,
-                      platformReferrer: address,
-                    }),
-                  });
-
-                  const data = await res.json();
-
-                  if (!res.ok) {
-                    alert(data?.error || "Zora coin creation failed");
-                    return;
-                  }
-
-                  console.log("Zora transaction prepared:", data);
-                  alert("Transaction prepared. Wallet wiring is next.");
-                }}
-              >
-                Create Real Coin
-              </button>
-            </div>
-          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

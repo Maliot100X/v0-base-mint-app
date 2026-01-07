@@ -1,7 +1,7 @@
 // lib/contentStore.ts
-// Internal content layer (drafts). Now persisted to localStorage (client only).
+// Internal content layer (drafts). Persisted to localStorage (client only).
 
-export type DraftContentStatus = "draft" | "coined";
+export type DraftContentStatus = "draft" | "registered" | "coined";
 
 export type DraftContent = {
   id: string;
@@ -10,12 +10,14 @@ export type DraftContent = {
   title: string;
   description: string;
   prompt: string;
-  imageUrl: string; // usually ipfs://...
+  imageUrl: string; // ipfs://...
   status: DraftContentStatus;
   createdAt: number; // unix ms
 };
 
-const STORAGE_KEY = "basemint_drafts_v1";
+/** ---------------- STORAGE ---------------- */
+
+const STORAGE_KEY = "basemint_drafts_v2";
 
 let _drafts: DraftContent[] = [];
 
@@ -30,18 +32,18 @@ function loadFromStorage() {
     if (!raw) return;
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) _drafts = parsed as DraftContent[];
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
 function saveToStorage() {
   if (!isBrowser()) return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(_drafts));
-  } catch {
-    // ignore
-  }
+  } catch {}
+}
+
+function ensureLoaded() {
+  if (_drafts.length === 0) loadFromStorage();
 }
 
 function nowMs() {
@@ -49,22 +51,15 @@ function nowMs() {
 }
 
 function genId() {
-  const rand = Math.random().toString(16).slice(2, 10);
-  return `dc_${nowMs()}_${rand}`;
+  return `dc_${nowMs()}_${Math.random().toString(16).slice(2, 10)}`;
 }
 
 function normWallet(addr: string) {
   return (addr || "").trim().toLowerCase();
 }
 
-function ensureLoaded() {
-  // lazy-load once per session
-  if (_drafts.length === 0) loadFromStorage();
-}
+/** ---------------- DRAFTS ---------------- */
 
-/**
- * Create a new DraftContent record (status="draft").
- */
 export function createDraftContent(input: {
   creatorWallet: string;
   creatorFid?: number;
@@ -84,10 +79,10 @@ export function createDraftContent(input: {
     id: genId(),
     creatorWallet,
     creatorFid: input.creatorFid,
-    title: (input.title || "").trim(),
-    description: (input.description || "").trim(),
-    prompt: (input.prompt || "").trim(),
-    imageUrl: (input.imageUrl || "").trim(),
+    title: input.title.trim(),
+    description: input.description.trim(),
+    prompt: input.prompt.trim(),
+    imageUrl: input.imageUrl.trim(),
     status: "draft",
     createdAt: nowMs(),
   };
@@ -97,46 +92,38 @@ export function createDraftContent(input: {
   return draft;
 }
 
-/**
- * Return all records, newest-first.
- */
 export function getAllDraftContent(): DraftContent[] {
   ensureLoaded();
   return [..._drafts];
 }
 
-/**
- * Return records for a specific creator wallet, newest-first.
- */
-export function getDraftsByCreator(creatorWallet: string): DraftContent[] {
+export function getDraftsByCreator(wallet: string): DraftContent[] {
   ensureLoaded();
-  const w = normWallet(creatorWallet);
+  const w = normWallet(wallet);
   if (!w) return [];
   return _drafts.filter((d) => d.creatorWallet === w);
 }
 
-/**
- * Mark a record as "coined".
- */
-export function markDraftAsCoined(id: string): DraftContent | null {
-  ensureLoaded();
-  const targetId = (id || "").trim();
-  if (!targetId) return null;
+/** ---------------- REGISTRATION ---------------- */
 
-  const idx = _drafts.findIndex((d) => d.id === targetId);
+export function markDraftAsRegistered(id: string): DraftContent | null {
+  ensureLoaded();
+  const idx = _drafts.findIndex((d) => d.id === id);
   if (idx === -1) return null;
 
-  const updated: DraftContent = {
-    ..._drafts[idx],
-    status: "coined",
-  };
-
-  const next = [..._drafts];
-  next[idx] = updated;
-  _drafts = next;
-
+  _drafts[idx] = { ..._drafts[idx], status: "registered" };
   saveToStorage();
-  return updated;
+  return _drafts[idx];
+}
+
+export function markDraftAsCoined(id: string): DraftContent | null {
+  ensureLoaded();
+  const idx = _drafts.findIndex((d) => d.id === id);
+  if (idx === -1) return null;
+
+  _drafts[idx] = { ..._drafts[idx], status: "coined" };
+  saveToStorage();
+  return _drafts[idx];
 }
 
 export function __dangerousResetContentStore() {
